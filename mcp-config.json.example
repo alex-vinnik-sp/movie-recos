@@ -7,7 +7,9 @@
       ],
       "cwd": "/Users/rajkorde/Documents/gitrepos/training/movie_recos",
       "env": {
-        "OPENAI_API_KEY": "your_openai_key",
+        "AWS_ACCESS_KEY_ID": "your_aws_access_key",
+        "AWS_SECRET_ACCESS_KEY": "your_aws_secret_key",
+        "AWS_REGION": "us-east-1",
         "TMDB_API_KEY": "your_tmdb_api_key",
         "TAVILY_API_KEY": "your_tavily_key"
       }

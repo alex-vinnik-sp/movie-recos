@@ -1,7 +1,7 @@
 # Movie Recommendations App
 
 A sophisticated movie recommendation system powered by AI, featuring:
-- **React Agent** with LangGraph and OpenAI
+- **React Agent** with LangGraph and AWS Bedrock (Claude 3 Haiku)
 - **TMDB API** integration for movie data
 - **Web search** capabilities via Tavily
 - **HTMX frontend** for a smooth user experience
@@ -43,8 +43,9 @@ movie_recos/
 
 - Python 3.10+
 - [UV package manager](https://github.com/astral-sh/uv) - Install with: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- AWS Account with Bedrock access
+- AWS Credentials configured (via AWS CLI or environment variables)
 - API Keys:
-  - [OpenAI API key](https://platform.openai.com/api-keys)
   - [TMDB API key](https://www.themoviedb.org/settings/api)
   - [Tavily API key](https://tavily.com/)
   - [LangSmith API key](https://smith.langchain.com/) (optional - for tracing)
@@ -79,7 +80,10 @@ cp backend/.env.example backend/.env
 Edit `backend/.env` and add your API keys:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+# AWS Configuration (credentials should be configured via AWS CLI or environment)
+AWS_REGION=us-east-1
+
+# API Keys
 TMDB_API_KEY=your_tmdb_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PORT=3000
@@ -89,6 +93,15 @@ LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=your_langsmith_api_key_here
 LANGCHAIN_PROJECT=movie-recommendations
 ```
+
+**AWS Credentials Setup:**
+
+AWS credentials should be configured using one of the following methods:
+1. **AWS CLI**: Run `aws configure` to set up credentials
+2. **Environment Variables**: Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+3. **IAM Role**: If running on AWS (EC2, Lambda, etc.)
+
+Ensure your AWS account has access to Amazon Bedrock and the Claude 3 Haiku model is enabled in your region.
 
 **Note:** LangSmith tracing is optional. If you don't want to use it, you can leave those fields commented out or set `LANGCHAIN_TRACING_V2=false`.
 
@@ -131,7 +144,9 @@ Example queries:
       "args": ["backend/run_mcp.py"],
       "cwd": "/absolute/path/to/movie_recos",
       "env": {
-        "OPENAI_API_KEY": "your_key_here",
+        "AWS_ACCESS_KEY_ID": "your_aws_access_key",
+        "AWS_SECRET_ACCESS_KEY": "your_aws_secret_key",
+        "AWS_REGION": "us-east-1",
         "TMDB_API_KEY": "your_key_here",
         "TAVILY_API_KEY": "your_key_here"
       }
@@ -220,7 +235,7 @@ When tracing is enabled, you'll see all agent interactions, tool calls, and LLM 
 
 ## How It Works
 
-1. **React Agent**: Uses LangGraph's state machine with OpenAI to orchestrate tool calls
+1. **React Agent**: Uses LangGraph's state machine with AWS Bedrock (Claude 3 Haiku) to orchestrate tool calls
    - Built as a cyclic graph with agent and tool nodes
    - Agent decides which tools to call based on the user's query
    - Tools execute and return results to the agent
@@ -232,7 +247,7 @@ When tracing is enabled, you'll see all agent interactions, tool calls, and LLM 
 4. **Agent Workflow**:
    - Receives user prompt
    - LangGraph manages state through message passing
-   - Agent node calls OpenAI with bound tools
+   - Agent node calls AWS Bedrock (Claude 3 Haiku) with bound tools
    - Tool node executes selected tools
    - Process repeats until agent provides final answer
    - All interactions traced via LangSmith (if enabled)

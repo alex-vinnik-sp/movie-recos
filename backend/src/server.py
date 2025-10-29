@@ -31,7 +31,7 @@ if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
     logger.info("LangSmith tracing enabled")
 
 # Validate required environment variables
-required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
+required_vars = ["TMDB_API_KEY", "TAVILY_API_KEY"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
@@ -43,13 +43,17 @@ if missing_vars:
 
 logger.info("All required environment variables are present")
 
+# Get AWS region (optional, defaults to us-east-1)
+aws_region = os.getenv("AWS_REGION", "us-east-1")
+logger.info(f"Using AWS region: {aws_region}")
+
 # Initialize the agent
 try:
-    logger.info("Initializing movie recommendation agent with OpenAI")
+    logger.info("Initializing movie recommendation agent with AWS Bedrock")
     agent = create_movie_agent(
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
         tmdb_api_key=os.getenv("TMDB_API_KEY"),
-        tavily_api_key=os.getenv("TAVILY_API_KEY")
+        tavily_api_key=os.getenv("TAVILY_API_KEY"),
+        aws_region=aws_region
     )
     logger.info("Agent initialized successfully")
 except Exception as e:

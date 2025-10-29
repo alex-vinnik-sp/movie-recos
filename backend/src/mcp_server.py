@@ -22,7 +22,7 @@ if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
     print("LangSmith tracing enabled", file=sys.stderr)
 
 # Validate required environment variables
-required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
+required_vars = ["TMDB_API_KEY", "TAVILY_API_KEY"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
@@ -31,11 +31,15 @@ if missing_vars:
         "Please create a .env file based on .env.example"
     )
 
+# Get AWS region (optional, defaults to us-east-1)
+aws_region = os.getenv("AWS_REGION", "us-east-1")
+print(f"Using AWS region: {aws_region}", file=sys.stderr)
+
 # Initialize the agent
 agent = create_movie_agent(
-    openai_api_key=os.getenv("OPENAI_API_KEY"),
     tmdb_api_key=os.getenv("TMDB_API_KEY"),
-    tavily_api_key=os.getenv("TAVILY_API_KEY")
+    tavily_api_key=os.getenv("TAVILY_API_KEY"),
+    aws_region=aws_region
 )
 
 # Create MCP server
