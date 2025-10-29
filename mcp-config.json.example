@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "movie-recommendations": {
+      "command": "python3",
+      "args": [
+        "backend/run_mcp.py"
+      ],
+      "cwd": "/Users/rajkorde/Documents/gitrepos/training/movie_recos",
+      "env": {
+        "ANTHROPIC_API_KEY": "your_anthropic_key",
+        "TMDB_API_KEY": "your_tmdb_api_key",
+        "TAVILY_API_KEY": "your_tavily_key"
+      }
+    }
+  }
+}

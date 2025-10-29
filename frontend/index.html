@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommendations</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 Movie Recommendations</h1>
+            <p class="subtitle">Powered by AI and TMDB</p>
+        </header>
+
+        <main>
+            <form
+                hx-post="http://localhost:3000/api/recommend"
+                hx-target="#results"
+                hx-indicator="#loading"
+                hx-on::after-request="this.reset()"
+            >
+                <div class="input-group">
+                    <label for="prompt">What kind of movies are you looking for?</label>
+                    <textarea
+                        id="prompt"
+                        name="prompt"
+                        rows="3"
+                        placeholder="e.g., 'action movies like John Wick' or 'romantic comedies from the 90s' or 'movies with strong female leads'"
+                        required
+                    ></textarea>
+                </div>
+                <button type="submit" class="btn-primary">
+                    Get Recommendations
+                </button>
+                <div id="loading" class="htmx-indicator">
+                    <div class="spinner"></div>
+                    <span>Finding perfect movies for you...</span>
+                </div>
+            </form>
+
+            <div id="results" class="results-container">
+                <!-- Results will appear here -->
+            </div>
+        </main>
+
+        <footer>
+            <p>This app uses <a href="https://www.themoviedb.org" target="_blank">TMDB API</a> for movie data</p>
+            <p class="tech-stack">
+                Built with HTMX, Express, LangChain, and Claude AI
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
