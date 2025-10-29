@@ -14,7 +14,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 3000))
 
     print(f"Starting server on http://localhost:{port}")
-    print(f"A2A API available at http://localhost:{port}/api/a2a")
     print(f"HTMX frontend available at http://localhost:{port}")
 
     uvicorn.run("src.server:app", host="0.0.0.0", port=port, reload=True)

@@ -5,7 +5,6 @@ A sophisticated movie recommendation system powered by AI, featuring:
 - **TMDB API** integration for movie data
 - **Web search** capabilities via Tavily
 - **HTMX frontend** for a smooth user experience
-- **A2A Server** for agent-to-agent communication
 - **MCP Server** for Claude desktop integration
 - **LangSmith** tracing for observability
 
@@ -16,7 +15,6 @@ A sophisticated movie recommendation system powered by AI, featuring:
 - Two interfaces:
   - HTMX web interface for browser-based interaction
   - MCP server for Claude desktop integration
-- A2A API endpoint for programmatic access
 
 ## Project Structure
 
@@ -164,24 +162,6 @@ code %APPDATA%\Claude\claude_desktop_config.json
 Can you recommend some sci-fi movies like Interstellar?
 ```
 
-### Option 3: A2A API
-
-Use the A2A endpoint programmatically:
-
-```bash
-curl -X POST http://localhost:3000/api/a2a/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "recommend action movies like The Matrix"}'
-```
-
-Response:
-```json
-{
-  "success": true,
-  "response": "Here are some great action movies similar to The Matrix..."
-}
-```
-
 ## API Reference
 
 ### HTMX Endpoint
@@ -192,25 +172,6 @@ Form data:
 - `prompt` (string): User's movie preference
 
 Returns: HTML formatted recommendations
-
-### A2A Endpoint
-
-**POST** `/api/a2a/invoke`
-
-JSON body:
-```json
-{
-  "prompt": "your movie preference"
-}
-```
-
-Response:
-```json
-{
-  "success": true,
-  "response": "recommendation text"
-}
-```
 
 ### MCP Tool
 
