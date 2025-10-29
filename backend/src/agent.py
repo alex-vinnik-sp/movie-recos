@@ -1,9 +1,11 @@
-"""Movie recommendation agent using LangGraph and Claude."""
+"""Movie recommendation agent using LangGraph and OpenAI."""
 
 import os
+import logging
+import traceback
 from typing import Annotated, Any, Dict, Sequence, TypedDict
 
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, StateGraph
@@ -12,6 +14,9 @@ from langgraph.prebuilt import ToolNode
 
 from src.tools.tmdb import create_tmdb_tools
 from src.tools.websearch import create_web_search_tool
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a helpful movie recommendation assistant. You have access to the TMDB (The Movie Database) API to search for movies and get detailed information, as well as web search capabilities to find reviews and additional context.
 
@@ -37,28 +42,49 @@ class MovieAgent:
 
     def __init__(
         self,
-        anthropic_api_key: str,
+        openai_api_key: str,
         tmdb_api_key: str,
         tavily_api_key: str,
-        model_name: str = "claude-sonnet-4-20250514",
+        model_name: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
     ):
         """Initialize the agent."""
+        logger.info(f"Initializing MovieAgent with model={model_name}, temperature={temperature}")
+        
         # Create tools
-        self.tools = [
-            *create_tmdb_tools(tmdb_api_key),
-            create_web_search_tool(tavily_api_key),
-        ]
+        try:
+            logger.info("Creating TMDB and web search tools")
+            self.tools = [
+                *create_tmdb_tools(tmdb_api_key),
+                create_web_search_tool(tavily_api_key),
+            ]
+            logger.info(f"Created {len(self.tools)} tools successfully")
+        except Exception as e:
+            logger.error(f"Failed to create tools: {str(e)}")
+            raise
 
         # Initialize LLM with tools
-        self.llm = ChatAnthropic(
-            model=model_name,
-            anthropic_api_key=anthropic_api_key,
-            temperature=temperature,
-        ).bind_tools(self.tools)
+        try:
+            logger.info("Initializing OpenAI LLM")
+            self.llm = ChatOpenAI(
+                model=model_name,
+                openai_api_key=openai_api_key,
+                temperature=temperature,
+            ).bind_tools(self.tools)
+            logger.info("LLM initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI LLM: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise
 
         # Build the graph
-        self.graph = self._build_graph()
+        try:
+            logger.info("Building LangGraph workflow")
+            self.graph = self._build_graph()
+            logger.info("LangGraph workflow built successfully")
+        except Exception as e:
+            logger.error(f"Failed to build graph: {str(e)}")
+            raise
 
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state graph."""
@@ -86,13 +112,21 @@ class MovieAgent:
     def _call_model(self, state: AgentState) -> Dict[str, Any]:
         """Call the model with the current state."""
         messages = state["messages"]
+        logger.debug(f"Calling model with {len(messages)} messages")
 
         # Add system message if this is the first call
         if not any(isinstance(m, AIMessage) for m in messages):
             messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+            logger.debug("Added system prompt to messages")
 
-        response = self.llm.invoke(messages)
-        return {"messages": [response]}
+        try:
+            response = self.llm.invoke(messages)
+            logger.debug(f"Model responded with message type: {type(response).__name__}")
+            return {"messages": [response]}
+        except Exception as e:
+            logger.error(f"Error calling model: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise
 
     def _should_continue(self, state: AgentState) -> str:
         """Determine if we should continue or end."""
@@ -125,26 +159,33 @@ class MovieAgent:
     async def aget_recommendations(self, user_prompt: str) -> Dict[str, Any]:
         """Get movie recommendations (async version)."""
         try:
+            logger.info(f"Starting async recommendation for prompt: '{user_prompt[:50]}...'")
+            
             # Create initial state
             initial_state = {"messages": [HumanMessage(content=user_prompt)]}
 
             # Run the graph asynchronously
+            logger.info("Invoking graph asynchronously")
             result = await self.graph.ainvoke(initial_state)
+            logger.info(f"Graph completed with {len(result['messages'])} messages")
 
             # Extract the final response
             final_message = result["messages"][-1]
+            logger.info(f"Final message type: {type(final_message).__name__}")
 
             return {"success": True, "response": final_message.content}
         except Exception as e:
+            logger.error(f"Error in aget_recommendations: {str(e)}")
+            logger.error(traceback.format_exc())
             return {"success": False, "error": str(e)}
 
 
 def create_movie_agent(
-    anthropic_api_key: str, tmdb_api_key: str, tavily_api_key: str
+    openai_api_key: str, tmdb_api_key: str, tavily_api_key: str
 ) -> MovieAgent:
     """Create and return a movie recommendation agent."""
     return MovieAgent(
-        anthropic_api_key=anthropic_api_key,
+        openai_api_key=openai_api_key,
         tmdb_api_key=tmdb_api_key,
         tavily_api_key=tavily_api_key,
     )

@@ -1,7 +1,7 @@
 # Movie Recommendations App
 
 A sophisticated movie recommendation system powered by AI, featuring:
-- **React Agent** with LangGraph and Claude AI
+- **React Agent** with LangGraph and OpenAI
 - **TMDB API** integration for movie data
 - **Web search** capabilities via Tavily
 - **HTMX frontend** for a smooth user experience
@@ -44,7 +44,7 @@ movie_recos/
 - Python 3.10+
 - [UV package manager](https://github.com/astral-sh/uv) - Install with: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - API Keys:
-  - [Anthropic API key](https://console.anthropic.com/)
+  - [OpenAI API key](https://platform.openai.com/api-keys)
   - [TMDB API key](https://www.themoviedb.org/settings/api)
   - [Tavily API key](https://tavily.com/)
   - [LangSmith API key](https://smith.langchain.com/) (optional - for tracing)
@@ -79,7 +79,7 @@ cp backend/.env.example backend/.env
 Edit `backend/.env` and add your API keys:
 
 ```env
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 TMDB_API_KEY=your_tmdb_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PORT=3000
@@ -131,7 +131,7 @@ Example queries:
       "args": ["backend/run_mcp.py"],
       "cwd": "/absolute/path/to/movie_recos",
       "env": {
-        "ANTHROPIC_API_KEY": "your_key_here",
+        "OPENAI_API_KEY": "your_key_here",
         "TMDB_API_KEY": "your_key_here",
         "TAVILY_API_KEY": "your_key_here"
       }
@@ -220,7 +220,7 @@ When tracing is enabled, you'll see all agent interactions, tool calls, and LLM 
 
 ## How It Works
 
-1. **React Agent**: Uses LangGraph's state machine with Claude AI to orchestrate tool calls
+1. **React Agent**: Uses LangGraph's state machine with OpenAI to orchestrate tool calls
    - Built as a cyclic graph with agent and tool nodes
    - Agent decides which tools to call based on the user's query
    - Tools execute and return results to the agent
@@ -232,7 +232,7 @@ When tracing is enabled, you'll see all agent interactions, tool calls, and LLM 
 4. **Agent Workflow**:
    - Receives user prompt
    - LangGraph manages state through message passing
-   - Agent node calls Claude with bound tools
+   - Agent node calls OpenAI with bound tools
    - Tool node executes selected tools
    - Process repeats until agent provides final answer
    - All interactions traced via LangSmith (if enabled)

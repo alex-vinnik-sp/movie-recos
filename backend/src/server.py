@@ -1,6 +1,8 @@
 """FastAPI server for movie recommendations with HTMX."""
 import os
 import re
+import logging
+import traceback
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -8,8 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from src.agent import create_movie_agent
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
+logger.info("Environment variables loaded")
 
 # Configure LangSmith tracing (if enabled)
 if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
@@ -18,24 +28,34 @@ if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
         os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
     if os.getenv("LANGCHAIN_PROJECT"):
         os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT")
-    print("LangSmith tracing enabled")
+    logger.info("LangSmith tracing enabled")
 
 # Validate required environment variables
-required_vars = ["ANTHROPIC_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
+required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
+    logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
     raise RuntimeError(
         f"Missing required environment variables: {', '.join(missing_vars)}\n"
         "Please create a .env file based on .env.example"
     )
 
+logger.info("All required environment variables are present")
+
 # Initialize the agent
-agent = create_movie_agent(
-    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-    tmdb_api_key=os.getenv("TMDB_API_KEY"),
-    tavily_api_key=os.getenv("TAVILY_API_KEY")
-)
+try:
+    logger.info("Initializing movie recommendation agent with OpenAI")
+    agent = create_movie_agent(
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        tmdb_api_key=os.getenv("TMDB_API_KEY"),
+        tavily_api_key=os.getenv("TAVILY_API_KEY")
+    )
+    logger.info("Agent initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize agent: {str(e)}")
+    logger.error(traceback.format_exc())
+    raise
 
 # Create FastAPI app
 app = FastAPI(title="Movie Recommendations API")
@@ -77,22 +97,39 @@ async def read_root():
 @app.post("/api/recommend", response_class=HTMLResponse)
 async def recommend(prompt: str = Form(...)):
     """HTMX endpoint for movie recommendations."""
+    logger.info(f"Received recommendation request: '{prompt}'")
+    
     if not prompt:
+        logger.warning("Empty prompt received")
         return HTMLResponse(
             content='<div class="error">Please enter a movie preference</div>',
             status_code=400
         )
 
-    result = await agent.aget_recommendations(prompt)
+    try:
+        logger.info("Calling agent.aget_recommendations()")
+        result = await agent.aget_recommendations(prompt)
+        logger.info(f"Agent returned result with success={result.get('success', False)}")
 
-    if not result["success"]:
+        if not result["success"]:
+            error_msg = result.get("error", "Unknown error")
+            logger.error(f"Agent returned error: {error_msg}")
+            return HTMLResponse(
+                content=f'<div class="error">Error: {error_msg}</div>',
+                status_code=500
+            )
+
+        logger.info("Formatting successful response")
+        formatted_response = format_response_for_html(result["response"])
+        return HTMLResponse(content=formatted_response)
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in recommend endpoint: {str(e)}")
+        logger.error(traceback.format_exc())
         return HTMLResponse(
-            content=f'<div class="error">Error: {result.get("error", "Unknown error")}</div>',
+            content=f'<div class="error">Unexpected error: {str(e)}</div>',
             status_code=500
         )
-
-    formatted_response = format_response_for_html(result["response"])
-    return HTMLResponse(content=formatted_response)
 
 
 @app.get("/health")

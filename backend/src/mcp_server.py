@@ -22,7 +22,7 @@ if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
     print("LangSmith tracing enabled", file=sys.stderr)
 
 # Validate required environment variables
-required_vars = ["ANTHROPIC_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
+required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
@@ -33,7 +33,7 @@ if missing_vars:
 
 # Initialize the agent
 agent = create_movie_agent(
-    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
     tmdb_api_key=os.getenv("TMDB_API_KEY"),
     tavily_api_key=os.getenv("TAVILY_API_KEY")
 )
