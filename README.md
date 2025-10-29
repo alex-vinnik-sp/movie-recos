@@ -6,7 +6,7 @@ A sophisticated movie recommendation system powered by AI, featuring:
 - **Web search** capabilities via Tavily
 - **HTMX frontend** for a smooth user experience
 - **MCP Server** for Claude desktop integration
-- **LangSmith** tracing for observability
+- **Snowflake AI Observability** for evaluation and tracing
 
 ## Features
 
@@ -43,11 +43,11 @@ movie_recos/
 
 - Python 3.10+
 - [UV package manager](https://github.com/astral-sh/uv) - Install with: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Snowflake account with Cortex access (optional - for AI Observability)
 - API Keys:
   - [OpenAI API key](https://platform.openai.com/api-keys)
   - [TMDB API key](https://www.themoviedb.org/settings/api)
   - [Tavily API key](https://tavily.com/)
-  - [LangSmith API key](https://smith.langchain.com/) (optional - for tracing)
 
 ## Setup
 
@@ -84,13 +84,19 @@ TMDB_API_KEY=your_tmdb_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PORT=3000
 
-# LangSmith Configuration (optional - for tracing)
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_api_key_here
-LANGCHAIN_PROJECT=movie-recommendations
+# Snowflake AI Observability Configuration (optional - for evaluation and tracing)
+ENABLE_SNOWFLAKE_OBSERVABILITY=true
+SNOWFLAKE_ACCOUNT=your_account
+SNOWFLAKE_USER=your_user
+SNOWFLAKE_PASSWORD=your_password
+SNOWFLAKE_DATABASE=your_database
+SNOWFLAKE_SCHEMA=your_schema
+SNOWFLAKE_WAREHOUSE=your_warehouse
+SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
+DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
 ```
 
-**Note:** LangSmith tracing is optional. If you don't want to use it, you can leave those fields commented out or set `LANGCHAIN_TRACING_V2=false`.
+**Note:** Snowflake AI Observability is optional. If you don't want to use it, set `ENABLE_SNOWFLAKE_OBSERVABILITY=false` or omit the Snowflake configuration.
 
 ## Usage
 
@@ -202,21 +208,66 @@ cd backend
 uv add package-name
 ```
 
-## LangSmith Tracing
+## Snowflake AI Observability
 
-This app includes LangSmith integration for tracing and observability. To enable:
+This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability) for comprehensive AI application evaluation and tracing. Snowflake AI Observability uses TruLens to provide:
 
-1. Sign up for [LangSmith](https://smith.langchain.com/)
-2. Get your API key
-3. Add to `.env`:
-   ```env
-   LANGCHAIN_TRACING_V2=true
-   LANGCHAIN_API_KEY=your_langsmith_api_key
-   LANGCHAIN_PROJECT=movie-recommendations
+- **Evaluations**: Systematic performance evaluation using LLM-as-a-judge technique
+- **Comparison**: Side-by-side comparison of different LLMs, prompts, and configurations
+- **Tracing**: Detailed execution traces for debugging and optimization
+- **Metrics**: Context relevance, answer relevance, groundedness scores, and more
+
+### Setup
+
+1. **Prerequisites in Snowflake**:
+   - Ensure your role has the following privileges:
+     - `CORTEX_USER` database role
+     - `AI_OBSERVABILITY_EVENTS_LOOKUP` application role
+     - `CREATE EXTERNAL AGENT` privilege on the schema
+     - `CREATE TASK` privilege on the schema
+     - `EXECUTE TASK` global privilege
+
+2. **Install TruLens packages** (already included in `pyproject.toml`):
+   ```bash
+   cd backend
+   uv sync
    ```
-4. View traces at https://smith.langchain.com/
 
-When tracing is enabled, you'll see all agent interactions, tool calls, and LLM responses in the LangSmith dashboard.
+3. **Configure environment variables** in `.env`:
+   ```env
+   ENABLE_SNOWFLAKE_OBSERVABILITY=true
+   SNOWFLAKE_ACCOUNT=your_account
+   SNOWFLAKE_USER=your_user
+   SNOWFLAKE_PASSWORD=your_password
+   SNOWFLAKE_DATABASE=your_database
+   SNOWFLAKE_SCHEMA=your_schema
+   SNOWFLAKE_WAREHOUSE=your_warehouse
+   SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
+   DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
+   ```
+   
+   **Note**: The `SNOWFLAKE_ROLE` should be a role that has the required privileges listed in step 1. If not specified, it defaults to `SYSADMIN`.
+   
+   **Debug Logging**: Set `DEBUG_TRULENS=true` to enable detailed debug logs from TruLens for troubleshooting connection and initialization issues.
+
+4. **Create External Agent in Snowflake** (run once):
+   ```sql
+   CREATE EXTERNAL AGENT movie_recommendations_agent
+   VERSION 'v1.0'
+   COMMENT = 'Movie recommendation agent with LangGraph and OpenAI';
+   ```
+
+5. **Start the application** - TruLens will automatically:
+   - Set `TRULENS_OTEL_TRACING=1` for distributed tracing
+   - Connect to Snowflake
+   - Store evaluation results and traces in your Snowflake account
+
+6. **View results in Snowsight**:
+   - Navigate to your Snowflake account
+   - Query the event tables to view traces and metrics
+   - Use AI Observability dashboards for evaluation comparisons
+
+For more information, see the [Snowflake AI Observability documentation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability).
 
 ## How It Works
 
@@ -235,7 +286,7 @@ When tracing is enabled, you'll see all agent interactions, tool calls, and LLM 
    - Agent node calls OpenAI with bound tools
    - Tool node executes selected tools
    - Process repeats until agent provides final answer
-   - All interactions traced via LangSmith (if enabled)
+   - All interactions traced via Snowflake AI Observability (if enabled)
 
 ## Architecture
 

@@ -1,6 +1,7 @@
 """FastAPI server for movie recommendations with HTMX."""
 import os
 import re
+import sys
 import logging
 import traceback
 from fastapi import FastAPI, Form
@@ -21,14 +22,57 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 logger.info("Environment variables loaded")
 
-# Configure LangSmith tracing (if enabled)
-if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    if os.getenv("LANGCHAIN_API_KEY"):
-        os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
-    if os.getenv("LANGCHAIN_PROJECT"):
-        os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT")
-    logger.info("LangSmith tracing enabled")
+# Enable TruLens debug logging if requested
+if os.getenv("DEBUG_TRULENS", "").lower() == "true":
+    logging.getLogger("trulens").setLevel(logging.DEBUG)
+    logging.getLogger("trulens.core").setLevel(logging.DEBUG)
+    logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
+    logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
+    logger.info("TruLens debug logging enabled")
+
+# Configure Snowflake AI Observability (if enabled)
+if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
+    # Set TruLens environment variable for OTEL tracing
+    os.environ["TRULENS_OTEL_TRACING"] = "1"
+    logger.info("Snowflake AI Observability enabled")
+    
+    # Initialize TruLens Snowflake connector
+    try:
+        from trulens.core import TruSession
+        from trulens.connectors.snowflake import SnowflakeConnector
+        
+        # Configure Snowflake connection
+        snowflake_config = {
+            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+            "user": os.getenv("SNOWFLAKE_USER"),
+            "password": os.getenv("SNOWFLAKE_PASSWORD"),
+            "database": os.getenv("SNOWFLAKE_DATABASE"),
+            "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+            "role": os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+        }
+        #logger.info(f"Snowflake configuration: {snowflake_config}")
+        # Validate Snowflake configuration
+        missing_sf_vars = [k for k, v in snowflake_config.items() if not v]
+        if missing_sf_vars:
+            logger.warning(f"Missing Snowflake configuration: {', '.join(missing_sf_vars)}")
+            logger.warning("Snowflake AI Observability will be disabled")
+        else:
+            connector = SnowflakeConnector(**snowflake_config)
+            tru_session = TruSession(connector=connector)
+            logger.info("TruLens Snowflake connector initialized successfully")
+    except ImportError:
+        logger.error("TruLens packages not installed. Run: uv sync")
+        sys.exit(1)
+    except ValueError as e:
+        logger.error(f"Invalid Snowflake configuration: {str(e)}")
+        logger.error("Please check your Snowflake credentials and configuration")
+        logger.error("Exiting due to invalid Snowflake configuration")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to initialize Snowflake AI Observability: {str(e)}")
+        logger.error(traceback.format_exc())
+        sys.exit(1)
 
 # Validate required environment variables
 required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
