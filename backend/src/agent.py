@@ -45,7 +45,7 @@ class MovieAgent:
         openai_api_key: str,
         tmdb_api_key: str,
         tavily_api_key: str,
-        model_name: str = "gpt-3.5-turbo",
+        model_name: str = "gpt-5-nano",
         temperature: float = 0.7,
     ):
         """Initialize the agent."""

@@ -6,4 +6,5 @@ dist/
 build/
 .venv
 .env
-mcp-config.json
+mcp-config.json__pycache__/
+*.pyc
