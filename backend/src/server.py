@@ -74,7 +74,9 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
         sys.exit(1)
 
 # Validate required environment variables
-required_vars = ["OPENAI_API_KEY", "TMDB_API_KEY", "TAVILY_API_KEY"]
+# Note: AWS credentials are handled by boto3's default credential chain
+# (environment variables, ~/.aws/credentials, IAM roles, etc.)
+required_vars = ["TMDB_API_KEY", "TAVILY_API_KEY"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
@@ -84,15 +86,21 @@ if missing_vars:
         "Please create a .env file based on .env.example"
     )
 
+# AWS region and profile are optional (will use defaults if not set)
+logger.info(f"AWS Region: {os.getenv('AWS_REGION', 'us-east-1')}")
+if os.getenv('AWS_PROFILE'):
+    logger.info(f"AWS Profile: {os.getenv('AWS_PROFILE')}")
+
 logger.info("All required environment variables are present")
 
 # Initialize the agent
 try:
-    logger.info("Initializing movie recommendation agent with OpenAI")
+    logger.info("Initializing movie recommendation agent with AWS Bedrock")
     agent = create_movie_agent(
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
         tmdb_api_key=os.getenv("TMDB_API_KEY"),
-        tavily_api_key=os.getenv("TAVILY_API_KEY")
+        tavily_api_key=os.getenv("TAVILY_API_KEY"),
+        aws_region=os.getenv("AWS_REGION", "us-east-1"),
+        aws_profile=os.getenv("AWS_PROFILE")
     )
     logger.info("Agent initialized successfully")
             

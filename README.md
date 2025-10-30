@@ -1,7 +1,7 @@
 # Movie Recommendations App
 
 A sophisticated movie recommendation system powered by AI, featuring:
-- **React Agent** with LangGraph and OpenAI
+- **React Agent** with LangGraph and AWS Bedrock (Claude 3.5 Sonnet)
 - **TMDB API** integration for movie data
 - **Web search** capabilities via Tavily
 - **HTMX frontend** for a smooth user experience
@@ -44,8 +44,9 @@ movie_recos/
 - Python 3.10+
 - [UV package manager](https://github.com/astral-sh/uv) - Install with: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Snowflake account with Cortex access (optional - for AI Observability)
+- AWS account with Bedrock access
 - API Keys:
-  - [OpenAI API key](https://platform.openai.com/api-keys)
+  - [AWS credentials](https://docs.aws.amazon.com/bedrock/latest/userguide/security-iam.html) with Bedrock access
   - [TMDB API key](https://www.themoviedb.org/settings/api)
   - [Tavily API key](https://tavily.com/)
 
@@ -79,7 +80,15 @@ cp backend/.env.example backend/.env
 Edit `backend/.env` and add your API keys:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+# AWS Bedrock Configuration (Optional - boto3 uses default credential chain)
+# Credentials will be automatically loaded from:
+# 1. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+# 2. ~/.aws/credentials file (if using `aws configure`)
+# 3. IAM roles (if running on AWS)
+AWS_REGION=us-east-1  # Optional, defaults to us-east-1
+AWS_PROFILE=dev  # Optional, only if using a specific AWS profile
+
+# API Keys
 TMDB_API_KEY=your_tmdb_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PORT=3000
@@ -96,6 +105,16 @@ SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
 SNOWFLAKE_APP_VERSION=v1.0  # version for tracking experiments
 DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
 ```
+
+**AWS Credentials:**
+The application uses boto3's default credential chain, which means credentials are automatically loaded from:
+1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+2. AWS credentials file (`~/.aws/credentials`) - works with `aws configure`
+3. AWS config file (`~/.aws/config`)
+4. IAM roles (if running on AWS infrastructure)
+5. SSO credentials
+
+You can use any of these methods. For example, if you use `aws configure set` to manage credentials, they will be automatically picked up.
 
 **Note:** Snowflake AI Observability is optional. If you don't want to use it, set `ENABLE_SNOWFLAKE_OBSERVABILITY=false` or omit the Snowflake configuration.
 
@@ -138,7 +157,8 @@ Example queries:
       "args": ["backend/run_mcp.py"],
       "cwd": "/absolute/path/to/movie_recos",
       "env": {
-        "OPENAI_API_KEY": "your_key_here",
+        "AWS_REGION": "us-east-1",
+        "AWS_PROFILE": "dev",
         "TMDB_API_KEY": "your_key_here",
         "TAVILY_API_KEY": "your_key_here"
       }
@@ -146,6 +166,8 @@ Example queries:
   }
 }
 ```
+
+**Note:** AWS credentials will be automatically loaded from your `~/.aws/credentials` file (if using `aws configure`) or from environment variables. You only need to specify `AWS_REGION` (optional) and `AWS_PROFILE` (optional, if using a specific profile).
 
 2. Add the MCP server to your Claude desktop configuration:
 
@@ -256,7 +278,7 @@ This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/use
    ```sql
    CREATE EXTERNAL AGENT movie_recommendations_agent
    VERSION 'v1.0'
-   COMMENT = 'Movie recommendation agent with LangGraph and OpenAI';
+   COMMENT = 'Movie recommendation agent with LangGraph and AWS Bedrock';
    ```
 
 5. **Start the application** - TruLens will automatically:
@@ -357,7 +379,7 @@ For detailed information about creating runs and computing metrics, see [Snowfla
 
 ## How It Works
 
-1. **React Agent**: Uses LangGraph's state machine with OpenAI to orchestrate tool calls
+1. **React Agent**: Uses LangGraph's state machine with AWS Bedrock (Claude 3.5 Sonnet) to orchestrate tool calls
    - Built as a cyclic graph with agent and tool nodes
    - Agent decides which tools to call based on the user's query
    - Tools execute and return results to the agent
@@ -369,7 +391,7 @@ For detailed information about creating runs and computing metrics, see [Snowfla
 4. **Agent Workflow**:
    - Receives user prompt
    - LangGraph manages state through message passing
-   - Agent node calls OpenAI with bound tools
+   - Agent node calls AWS Bedrock with bound tools
    - Tool node executes selected tools
    - Process repeats until agent provides final answer
    - All interactions traced via Snowflake AI Observability (if enabled)
