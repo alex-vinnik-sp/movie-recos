@@ -15,6 +15,10 @@ from langgraph.prebuilt import ToolNode
 from src.tools.tmdb import create_tmdb_tools
 from src.tools.websearch import create_web_search_tool
 
+# TruLens instrumentation imports for Snowflake AI Observability
+from trulens.core.otel.instrument import instrument
+from trulens.otel.semconv.trace import SpanAttributes
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -109,6 +113,7 @@ class MovieAgent:
         # Compile the graph
         return workflow.compile()
 
+    @instrument(span_type=SpanAttributes.SpanType.GENERATION)
     def _call_model(self, state: AgentState) -> Dict[str, Any]:
         """Call the model with the current state."""
         messages = state["messages"]
@@ -141,21 +146,34 @@ class MovieAgent:
         return "end"
 
     def get_recommendations(self, user_prompt: str) -> Dict[str, Any]:
-        """Get movie recommendations based on user prompt."""
+        """Get movie recommendations based on user prompt (sync version - not the main entry point)."""
         try:
+            logger.info(f"Starting recommendation for prompt: '{user_prompt[:50]}...'")
+            
             # Create initial state
             initial_state = {"messages": [HumanMessage(content=user_prompt)]}
 
             # Run the graph
             result = self.graph.invoke(initial_state)
+            logger.info(f"Graph completed with {len(result['messages'])} messages")
 
             # Extract the final response
             final_message = result["messages"][-1]
+            logger.info(f"Final message type: {type(final_message).__name__}")
 
             return {"success": True, "response": final_message.content}
         except Exception as e:
+            logger.error(f"Error in get_recommendations: {str(e)}")
+            logger.error(traceback.format_exc())
             return {"success": False, "error": str(e)}
 
+    @instrument(
+        span_type=SpanAttributes.SpanType.RECORD_ROOT,
+        attributes={
+            SpanAttributes.RECORD_ROOT.INPUT: "user_prompt",
+            SpanAttributes.RECORD_ROOT.OUTPUT: "return",
+        }
+    )
     async def aget_recommendations(self, user_prompt: str) -> Dict[str, Any]:
         """Get movie recommendations (async version)."""
         try:

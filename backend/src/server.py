@@ -38,7 +38,6 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     
     # Initialize TruLens Snowflake connector
     try:
-        from trulens.core import TruSession
         from trulens.connectors.snowflake import SnowflakeConnector
         
         # Configure Snowflake connection
@@ -59,10 +58,10 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
             logger.warning("Snowflake AI Observability will be disabled")
         else:
             connector = SnowflakeConnector(**snowflake_config)
-            tru_session = TruSession(connector=connector)
-            logger.info("TruLens Snowflake connector initialized successfully")
+            logger.info("Snowflake connector initialized for OTEL trace export")
     except ImportError:
         logger.error("TruLens packages not installed. Run: uv sync")
+        logger.error(traceback.format_exc())
         sys.exit(1)
     except ValueError as e:
         logger.error(f"Invalid Snowflake configuration: {str(e)}")
@@ -96,6 +95,7 @@ try:
         tavily_api_key=os.getenv("TAVILY_API_KEY")
     )
     logger.info("Agent initialized successfully")
+            
 except Exception as e:
     logger.error(f"Failed to initialize agent: {str(e)}")
     logger.error(traceback.format_exc())

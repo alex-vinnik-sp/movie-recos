@@ -1,9 +1,14 @@
 """Web search tool using Tavily API."""
 import json
+import logging
 from typing import Type
 import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
+from trulens.core.otel.instrument import instrument
+from trulens.otel.semconv.trace import SpanAttributes
+
+logger = logging.getLogger(__name__)
 
 
 class WebSearchInput(BaseModel):
@@ -23,8 +28,17 @@ class WebSearchTool(BaseTool):
     args_schema: Type[BaseModel] = WebSearchInput
     api_key: str
 
+
+    @instrument(
+        span_type=SpanAttributes.SpanType.RETRIEVAL,
+        attributes={
+            SpanAttributes.RETRIEVAL.QUERY_TEXT: "query",
+            SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS: "return",
+            }
+    )
     def _run(self, query: str) -> str:
         """Execute the search."""
+        logger.info(f"Web search: query='{query}'")
         try:
             response = requests.post(
                 "https://api.tavily.com/search",
@@ -48,6 +62,8 @@ class WebSearchTool(BaseTool):
                 for result in data.get("results", [])
             ]
 
+            logger.info(f"Web search returned {len(results)} results")
+
             return json.dumps({
                 "success": True,
                 "query": query,
@@ -55,6 +71,7 @@ class WebSearchTool(BaseTool):
             }, indent=2)
 
         except Exception as e:
+            logger.error(f"Web search failed for query '{query}': {str(e)}")
             return json.dumps({
                 "success": False,
                 "error": str(e)

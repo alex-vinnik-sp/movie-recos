@@ -1,11 +1,15 @@
 """TMDB API tools for movie search and details."""
 import json
 import os
+import logging
 from typing import Optional, Type
 import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
+from trulens.core.otel.instrument import instrument
+from trulens.otel.semconv.trace import SpanAttributes
 
+logger = logging.getLogger(__name__)
 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
@@ -36,6 +40,7 @@ class SearchMoviesTool(BaseTool):
 
     def _run(self, query: str, year: Optional[str] = None, page: int = 1) -> str:
         """Execute the search."""
+        logger.info(f"Searching movies: query='{query}', year={year}, page={page}")
         try:
             params = {
                 "api_key": self.api_key,
@@ -68,6 +73,8 @@ class SearchMoviesTool(BaseTool):
                 for movie in data["results"][:10]
             ]
 
+            logger.info(f"TMDB search returned {data['total_results']} total results, showing {len(movies)}")
+
             return json.dumps({
                 "success": True,
                 "total_results": data["total_results"],
@@ -75,6 +82,7 @@ class SearchMoviesTool(BaseTool):
             }, indent=2)
 
         except Exception as e:
+            logger.error(f"TMDB search failed for query '{query}': {str(e)}")
             return json.dumps({
                 "success": False,
                 "error": str(e)
@@ -96,8 +104,17 @@ class MovieDetailsTool(BaseTool):
     args_schema: Type[BaseModel] = MovieDetailsInput
     api_key: str
 
+
+    @instrument(
+        span_type=SpanAttributes.SpanType.RETRIEVAL,
+        attributes={
+            SpanAttributes.RETRIEVAL.QUERY_TEXT: "movie_id",
+            SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS: "return",
+            }
+    )
     def _run(self, movie_id: int) -> str:
         """Execute the details fetch."""
+        logger.info(f"Fetching movie details: movie_id={movie_id}")
         try:
             params = {
                 "api_key": self.api_key,
@@ -107,6 +124,8 @@ class MovieDetailsTool(BaseTool):
             response = requests.get(f"{TMDB_BASE_URL}/movie/{movie_id}", params=params)
             response.raise_for_status()
             movie = response.json()
+
+            logger.info(f"Retrieved details for movie: '{movie.get('title', 'Unknown')}'")
 
             result = {
                 "success": True,
@@ -129,6 +148,7 @@ class MovieDetailsTool(BaseTool):
             return json.dumps(result, indent=2)
 
         except Exception as e:
+            logger.error(f"Failed to fetch movie details for ID {movie_id}: {str(e)}")
             return json.dumps({
                 "success": False,
                 "error": str(e)

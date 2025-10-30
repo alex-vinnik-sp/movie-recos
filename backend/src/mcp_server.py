@@ -29,7 +29,6 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     
     # Initialize TruLens Snowflake connector
     try:
-        from trulens.core import TruSession
         from trulens.connectors.snowflake import SnowflakeConnector
         
         # Configure Snowflake connection
@@ -50,8 +49,7 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
             print("Snowflake AI Observability will be disabled", file=sys.stderr)
         else:
             connector = SnowflakeConnector(**snowflake_config)
-            tru_session = TruSession(connector=connector)
-            print("TruLens Snowflake connector initialized successfully", file=sys.stderr)
+            print("Snowflake connector initialized for OTEL trace export", file=sys.stderr)
     except ImportError:
         print("Error: TruLens packages not installed. Run: uv sync", file=sys.stderr)
         sys.exit(1)

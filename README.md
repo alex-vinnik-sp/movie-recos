@@ -93,6 +93,7 @@ SNOWFLAKE_DATABASE=your_database
 SNOWFLAKE_SCHEMA=your_schema
 SNOWFLAKE_WAREHOUSE=your_warehouse
 SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
+SNOWFLAKE_APP_VERSION=v1.0  # version for tracking experiments
 DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
 ```
 
@@ -243,6 +244,7 @@ This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/use
    SNOWFLAKE_SCHEMA=your_schema
    SNOWFLAKE_WAREHOUSE=your_warehouse
    SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
+   SNOWFLAKE_APP_VERSION=v1.0  # version for tracking experiments
    DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
    ```
    
@@ -268,6 +270,90 @@ This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/use
    - Use AI Observability dashboards for evaluation comparisons
 
 For more information, see the [Snowflake AI Observability documentation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability).
+
+### Instrumentation
+
+The movie recommendation agent is instrumented with TruLens decorators for comprehensive tracing and evaluation:
+
+**Instrumented Methods:**
+
+1. **`get_recommendations()` and `aget_recommendations()`** - Main entry points
+   - Span Type: `RECORD_ROOT`
+   - Captures: User input prompt and final response
+   - Enables: Answer relevance, correctness, and coherence metrics
+
+2. **`_call_model()`** - LLM inference
+   - Span Type: `GENERATION`
+   - Captures: Model invocation, latency, and responses
+   - Enables: Generation quality metrics
+
+**What Gets Traced:**
+- Input prompts and output responses
+- LLM inference calls with latency
+- Tool invocations (TMDB searches, web searches)
+- Intermediate steps in the agent workflow
+- Error conditions and exceptions
+
+**Viewing Traces:**
+1. Navigate to Snowsight → AI & ML → Evaluations
+2. Select your application and run
+3. View detailed traces with inputs, outputs, and latency for each stage
+4. Analyze evaluation metrics (relevance, groundedness, coherence)
+
+For detailed instrumentation guide, see [Snowflake AI Observability - Instrument the app](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability/evaluate-ai-applications#instrument-the-app).
+
+### Application Registration
+
+When Snowflake AI Observability is enabled, the application is automatically registered using `TruSession.App()`:
+
+```python
+tru_app = tru_session.App(
+    app=agent,
+    app_name="movie-recommendations",
+    app_version="v1.0",  # configurable via SNOWFLAKE_APP_VERSION
+    main_method=agent.aget_recommendations
+)
+```
+
+**What This Enables:**
+- **Trace capture**: All interactions are recorded in Snowflake
+- **Evaluation runs**: Create runs with test datasets to compute metrics
+- **Version tracking**: Compare different versions (v1.0, v1.1, v2.0, etc.)
+- **Experiment comparison**: Side-by-side comparison in Snowsight
+
+**Creating Evaluation Runs:**
+
+After the application is registered, you can create evaluation runs programmatically:
+
+```python
+from trulens.core import RunConfig
+
+# Define your run configuration
+run_config = RunConfig(
+    run_name="test-run-1",
+    description="Testing movie recommendations with sample queries",
+    source_type="DATAFRAME",
+    dataset_name="test_queries",
+    dataset_spec={
+        "RECORD_ROOT.INPUT": "query",
+        "RECORD_ROOT.GROUND_TRUTH_OUTPUT": "expected_answer"
+    },
+    llm_judge_name="mistral-large2"
+)
+
+# Create and execute the run
+run = tru_app.add_run(run_config=run_config)
+run.start(input_df=test_dataframe)
+
+# Compute evaluation metrics
+run.compute_metrics(metrics=[
+    "answer_relevance",
+    "coherence",
+    "correctness"
+])
+```
+
+For detailed information about creating runs and computing metrics, see [Snowflake AI Observability - Evaluate AI applications](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability/evaluate-ai-applications#register-app-in-snowflake).
 
 ## How It Works
 
