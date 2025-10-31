@@ -30,11 +30,11 @@ if os.getenv("DEBUG_TRULENS", "").lower() == "true":
     logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
     logger.info("TruLens debug logging enabled")
 
-# Configure Snowflake AI Observability (if enabled)
+# Configure Snowflake AI Observability for tracing (if enabled)
 if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     # Set TruLens environment variable for OTEL tracing
     os.environ["TRULENS_OTEL_TRACING"] = "1"
-    logger.info("Snowflake AI Observability enabled")
+    logger.info("Snowflake AI Observability (tracing) enabled")
     
     # Initialize TruLens Snowflake connector
     try:

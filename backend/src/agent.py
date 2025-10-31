@@ -15,7 +15,7 @@ from langgraph.prebuilt import ToolNode
 from src.tools.tmdb import create_tmdb_tools
 from src.tools.websearch import create_web_search_tool
 
-# TruLens instrumentation imports for Snowflake AI Observability
+# TruLens instrumentation imports for tracking/tracing to Snowflake
 from trulens.core.otel.instrument import instrument
 from trulens.otel.semconv.trace import SpanAttributes
 
