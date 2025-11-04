@@ -40,11 +40,11 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
         
-        # Configure Snowflake connection
+        # Configure Snowflake with SSO connection
         snowflake_config = {
             "account": os.getenv("SNOWFLAKE_ACCOUNT"),
             "user": os.getenv("SNOWFLAKE_USER"),
-            "password": os.getenv("SNOWFLAKE_PASSWORD"),
+            "password": "", # Use SSO authentication
             "database": os.getenv("SNOWFLAKE_DATABASE"),
             "schema": os.getenv("SNOWFLAKE_SCHEMA"),
             "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
