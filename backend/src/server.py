@@ -39,25 +39,33 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     # Initialize TruLens Snowflake connector
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
+        from snowflake.snowpark import Session
         
-        # Configure Snowflake with SSO connection
+        # Configure Snowflake connection with SSO
         snowflake_config = {
             "account": os.getenv("SNOWFLAKE_ACCOUNT"),
             "user": os.getenv("SNOWFLAKE_USER"),
-            "password": "", # Use SSO authentication
+            "authenticator": "externalbrowser",  # SSO authentication
             "database": os.getenv("SNOWFLAKE_DATABASE"),
             "schema": os.getenv("SNOWFLAKE_SCHEMA"),
             "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
             "role": os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
         }
-        #logger.info(f"Snowflake configuration: {snowflake_config}")
+        
         # Validate Snowflake configuration
-        missing_sf_vars = [k for k, v in snowflake_config.items() if not v]
+        required_keys = ["account", "user", "database", "schema", "warehouse"]
+        missing_sf_vars = [k for k in required_keys if not snowflake_config.get(k)]
         if missing_sf_vars:
             logger.warning(f"Missing Snowflake configuration: {', '.join(missing_sf_vars)}")
             logger.warning("Snowflake AI Observability will be disabled")
         else:
-            connector = SnowflakeConnector(**snowflake_config)
+            # Create Snowpark session with SSO
+            logger.info("Creating Snowpark session with SSO authentication...")
+            snowpark_session = Session.builder.configs(snowflake_config).create()
+            logger.info("Snowpark session created successfully")
+            
+            # Initialize TruLens connector with the Snowpark session
+            connector = SnowflakeConnector(snowpark_session=snowpark_session)
             logger.info("Snowflake connector initialized for OTEL trace export")
     except ImportError:
         logger.error("TruLens packages not installed. Run: uv sync")

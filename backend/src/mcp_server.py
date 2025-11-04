@@ -30,12 +30,13 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
     # Initialize TruLens Snowflake connector
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
+        from snowflake.snowpark import Session
         
         # Configure Snowflake connection with SSO
         snowflake_config = {
             "account": os.getenv("SNOWFLAKE_ACCOUNT"),
             "user": os.getenv("SNOWFLAKE_USER"),
-            "password": "",  # Use SSO authentication
+            "authenticator": "externalbrowser",  # SSO authentication
             "database": os.getenv("SNOWFLAKE_DATABASE"),
             "schema": os.getenv("SNOWFLAKE_SCHEMA"),
             "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
@@ -43,12 +44,19 @@ if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
         }
         
         # Validate Snowflake configuration
-        missing_sf_vars = [k for k, v in snowflake_config.items() if not v]
+        required_keys = ["account", "user", "database", "schema", "warehouse"]
+        missing_sf_vars = [k for k in required_keys if not snowflake_config.get(k)]
         if missing_sf_vars:
             print(f"Warning: Missing Snowflake configuration: {', '.join(missing_sf_vars)}", file=sys.stderr)
             print("Snowflake AI Observability will be disabled", file=sys.stderr)
         else:
-            connector = SnowflakeConnector(**snowflake_config)
+            # Create Snowpark session with SSO
+            print("Creating Snowpark session with SSO authentication...", file=sys.stderr)
+            snowpark_session = Session.builder.configs(snowflake_config).create()
+            print("Snowpark session created successfully", file=sys.stderr)
+            
+            # Initialize TruLens connector with the Snowpark session
+            connector = SnowflakeConnector(snowpark_session=snowpark_session)
             print("Snowflake connector initialized for OTEL trace export", file=sys.stderr)
     except ImportError:
         print("Error: TruLens packages not installed. Run: uv sync", file=sys.stderr)
