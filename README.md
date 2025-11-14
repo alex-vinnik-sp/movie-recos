@@ -233,22 +233,22 @@ uv add package-name
 
 ## Snowflake AI Observability
 
-This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability) for comprehensive AI application evaluation and tracing. Snowflake AI Observability uses TruLens to provide:
+This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability) for LangGraph application tracing and monitoring. TruLens provides:
 
-- **Evaluations**: Systematic performance evaluation using LLM-as-a-judge technique
-- **Comparison**: Side-by-side comparison of different LLMs, prompts, and configurations
-- **Tracing**: Detailed execution traces for debugging and optimization
-- **Metrics**: Context relevance, answer relevance, groundedness scores, and more
+- **Distributed Tracing**: OTEL-based traces exported to Snowflake for observability
+- **LangGraph Execution Tracking**: Captures agent workflow, LLM calls, and tool usage
+- **Performance Monitoring**: Latency, execution times, and error tracking
+- **Debugging**: Detailed execution traces with inputs/outputs at each step
 
 ### Setup
 
 1. **Prerequisites in Snowflake**:
    - Ensure your role has the following privileges:
-     - `CORTEX_USER` database role
-     - `AI_OBSERVABILITY_EVENTS_LOOKUP` application role
-     - `CREATE EXTERNAL AGENT` privilege on the schema
-     - `CREATE TASK` privilege on the schema
-     - `EXECUTE TASK` global privilege
+     - Access to the database, schema, and warehouse
+     - Permissions to write event data (for OTEL traces)
+   - Optional for advanced features:
+     - `CORTEX_USER` database role (if using Cortex features)
+     - `AI_OBSERVABILITY_EVENTS_LOOKUP` application role (for querying traces)
 
 2. **Install TruLens packages** (already included in `pyproject.toml`):
    ```bash
@@ -259,123 +259,82 @@ This app includes [Snowflake AI Observability](https://docs.snowflake.com/en/use
 3. **Configure environment variables** in `.env`:
    ```env
    ENABLE_SNOWFLAKE_OBSERVABILITY=true
-   SNOWFLAKE_ACCOUNT=your_account
-   SNOWFLAKE_USER=your_user
-   SNOWFLAKE_PASSWORD=your_password
+   SNOWFLAKE_ACCOUNT=sailpoint-dev  # your Snowflake account identifier
+   SNOWFLAKE_USER=your.email@company.com  # your email for SSO authentication
    SNOWFLAKE_DATABASE=your_database
    SNOWFLAKE_SCHEMA=your_schema
    SNOWFLAKE_WAREHOUSE=your_warehouse
    SNOWFLAKE_ROLE=SYSADMIN  # or your custom role with required privileges
-   SNOWFLAKE_APP_VERSION=v1.0  # version for tracking experiments
    DEBUG_TRULENS=false  # set to true to enable TruLens debug logging
    ```
+   
+   **Authentication**: Uses SSO (Single Sign-On) with `externalbrowser` authenticator. When you start the application, a browser window will open for authentication (same as `snowsql --authenticator externalbrowser`).
    
    **Note**: The `SNOWFLAKE_ROLE` should be a role that has the required privileges listed in step 1. If not specified, it defaults to `SYSADMIN`.
    
    **Debug Logging**: Set `DEBUG_TRULENS=true` to enable detailed debug logs from TruLens for troubleshooting connection and initialization issues.
 
-4. **Create External Agent in Snowflake** (run once):
-   ```sql
-   CREATE EXTERNAL AGENT movie_recommendations_agent
-   VERSION 'v1.0'
-   COMMENT = 'Movie recommendation agent with LangGraph and AWS Bedrock';
-   ```
-
-5. **Start the application** - TruLens will automatically:
+4. **Start the application** - TruLens will automatically:
    - Set `TRULENS_OTEL_TRACING=1` for distributed tracing
-   - Connect to Snowflake
-   - Store evaluation results and traces in your Snowflake account
+   - Open browser for SSO authentication (first time)
+   - Create Snowpark session with your credentials
+   - Connect to Snowflake and export OTEL traces
 
-6. **View results in Snowsight**:
+5. **View traces in Snowsight**:
    - Navigate to your Snowflake account
-   - Query the event tables to view traces and metrics
-   - Use AI Observability dashboards for evaluation comparisons
+   - Query the event tables to view execution traces
+   - Use AI Observability dashboards for performance monitoring
 
 For more information, see the [Snowflake AI Observability documentation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability).
 
 ### Instrumentation
 
-The movie recommendation agent is instrumented with TruLens decorators for comprehensive tracing and evaluation:
+The movie recommendation agent is instrumented with TruLens `@instrument` decorators for distributed tracing:
 
 **Instrumented Methods:**
 
-1. **`get_recommendations()` and `aget_recommendations()`** - Main entry points
+1. **`aget_recommendations()`** - Main entry point
    - Span Type: `RECORD_ROOT`
    - Captures: User input prompt and final response
-   - Enables: Answer relevance, correctness, and coherence metrics
+   - Tracks: End-to-end execution and latency
 
 2. **`_call_model()`** - LLM inference
    - Span Type: `GENERATION`
    - Captures: Model invocation, latency, and responses
-   - Enables: Generation quality metrics
+   - Tracks: LLM generation performance
+
+3. **Tool Methods** - TMDB and web search
+   - Span Type: `RETRIEVAL`
+   - Captures: Query inputs and retrieved contexts
+   - Tracks: Tool execution and data retrieval
 
 **What Gets Traced:**
 - Input prompts and output responses
 - LLM inference calls with latency
-- Tool invocations (TMDB searches, web searches)
-- Intermediate steps in the agent workflow
+- Tool invocations (TMDB movie searches, web searches)
+- LangGraph node transitions and state changes
 - Error conditions and exceptions
+- Execution timing at each step
 
 **Viewing Traces:**
-1. Navigate to Snowsight → AI & ML → Evaluations
-2. Select your application and run
-3. View detailed traces with inputs, outputs, and latency for each stage
-4. Analyze evaluation metrics (relevance, groundedness, coherence)
+1. Navigate to Snowsight → AI & ML → Observability
+2. Select your application
+3. View detailed OTEL traces with inputs, outputs, and latency for each span
+4. Analyze performance bottlenecks and execution flow
 
 For detailed instrumentation guide, see [Snowflake AI Observability - Instrument the app](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability/evaluate-ai-applications#instrument-the-app).
 
-### Application Registration
+### TruLens Packages
 
-When Snowflake AI Observability is enabled, the application is automatically registered using `TruSession.App()`:
+The application uses the following TruLens packages for tracking:
 
-```python
-tru_app = tru_session.App(
-    app=agent,
-    app_name="movie-recommendations",
-    app_version="v1.0",  # configurable via SNOWFLAKE_APP_VERSION
-    main_method=agent.aget_recommendations
-)
-```
+- **`trulens-core`** - Core instrumentation with `@instrument` decorators
+- **`trulens-connectors-snowflake`** - OTEL trace export to Snowflake
+- **`trulens-apps-langgraph`** - LangGraph-specific tracing support (available for automatic graph-level tracing)
 
-**What This Enables:**
-- **Trace capture**: All interactions are recorded in Snowflake
-- **Evaluation runs**: Create runs with test datasets to compute metrics
-- **Version tracking**: Compare different versions (v1.0, v1.1, v2.0, etc.)
-- **Experiment comparison**: Side-by-side comparison in Snowsight
+**Note**: This setup is optimized for **tracking and observability only**. Evaluation features (e.g., `trulens-providers-cortex` for LLM-as-a-judge metrics) are not included. If you need evaluation capabilities, you can add them separately.
 
-**Creating Evaluation Runs:**
-
-After the application is registered, you can create evaluation runs programmatically:
-
-```python
-from trulens.core import RunConfig
-
-# Define your run configuration
-run_config = RunConfig(
-    run_name="test-run-1",
-    description="Testing movie recommendations with sample queries",
-    source_type="DATAFRAME",
-    dataset_name="test_queries",
-    dataset_spec={
-        "RECORD_ROOT.INPUT": "query",
-        "RECORD_ROOT.GROUND_TRUTH_OUTPUT": "expected_answer"
-    },
-    llm_judge_name="mistral-large2"
-)
-
-# Create and execute the run
-run = tru_app.add_run(run_config=run_config)
-run.start(input_df=test_dataframe)
-
-# Compute evaluation metrics
-run.compute_metrics(metrics=[
-    "answer_relevance",
-    "coherence",
-    "correctness"
-])
-```
-
-For detailed information about creating runs and computing metrics, see [Snowflake AI Observability - Evaluate AI applications](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability/evaluate-ai-applications#register-app-in-snowflake).
+For detailed information about Snowflake AI Observability features, see [Snowflake AI Observability documentation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/ai-observability).
 
 ## How It Works
 
