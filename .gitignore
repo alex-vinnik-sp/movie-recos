@@ -7,3 +7,8 @@ build/
 .venv
 .env
 mcp-config.json
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
