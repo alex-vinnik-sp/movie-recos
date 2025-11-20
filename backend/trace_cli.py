@@ -264,21 +264,40 @@ def main():
     ]
 
     try:
+        # Define async function to process a single query
+        async def process_query(query, index):
+            """Process a single query and return result with index."""
+            logger.info(f"Starting query {index}: {query}")
+            result = await agent.aget_recommendations(query)
+            return (index, query, result)
+
         # Define async function to run within live_run context
         async def run_recommendations():
             with tru_app.live_run(run_name=run_name) as live_run:
                 logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
                 
-                for i, query in enumerate(queries, 1):
+                print(f"\n{'=' * 60}")
+                print(f"RUNNING {len(queries)} QUERIES IN PARALLEL")
+                print("=" * 60)
+                print()
+                
+                # Run all queries in parallel using asyncio.gather
+                logger.info("Executing all queries concurrently...")
+                tasks = [process_query(query, i+1) for i, query in enumerate(queries)]
+                results = await asyncio.gather(*tasks)
+                
+                logger.info("✓ All queries completed")
+                print()
+                
+                # Display results in order
+                all_success = True
+                for index, query, result in results:
                     print(f"\n{'=' * 60}")
-                    print(f"QUERY {i}/{len(queries)}: {query}")
+                    print(f"QUERY {index}/{len(queries)}: {query}")
                     print("=" * 60)
-                    logger.info(f"Processing query {i}: {query}")
-                    
-                    result = await agent.aget_recommendations(query)
                     
                     if result.get("success"):
-                        logger.info(f"✓ Query {i} completed successfully")
+                        logger.info(f"✓ Query {index} successful")
                         print("-" * 60)
                         print("RESPONSE:")
                         print("-" * 60)
@@ -286,10 +305,10 @@ def main():
                         print("-" * 60)
                         print()
                     else:
-                        logger.error(f"Query {i} failed: {result.get('error')}")
-                        return False
+                        logger.error(f"Query {index} failed: {result.get('error')}")
+                        all_success = False
                 
-                return True
+                return all_success
 
         # Run async recommendations within TruApp live_run context
         success = asyncio.run(run_recommendations())
