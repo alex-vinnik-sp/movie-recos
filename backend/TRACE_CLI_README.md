@@ -150,44 +150,6 @@ RESPONSE:
 =============================================================
 ```
 
-## 📈 Viewing Traces in Snowflake
-
-### 1. Navigate to Snowsight
-
-Go to: **Data → Databases → YOUR_DATABASE → YOUR_SCHEMA**
-
-### 2. Find TruLens Tables
-
-Look for tables created by TruLens:
-- `TRULENS_RECORDS` - Root-level traces
-- `TRULENS_SPANS` - Individual operation spans (LLM calls)
-- `TRULENS_FEEDBACKS` - Evaluation/feedback data (if configured)
-
-### 3. Query Traces
-
-```sql
--- View all recent traces
-SELECT * FROM YOUR_SCHEMA.TRULENS_RECORDS 
-ORDER BY TIMESTAMP DESC 
-LIMIT 10;
-
--- View LLM call spans
-SELECT * FROM YOUR_SCHEMA.TRULENS_SPANS 
-ORDER BY START_TIME DESC 
-LIMIT 10;
-
--- See trace details with inputs/outputs
-SELECT 
-    RECORD_ID,
-    TIMESTAMP,
-    INPUT,
-    OUTPUT,
-    APP_ID
-FROM YOUR_SCHEMA.TRULENS_RECORDS
-WHERE APP_ID = 'movie_agent'
-ORDER BY TIMESTAMP DESC;
-```
-
 ## 🔍 Key Features
 
 ### ✅ Parallel Query Execution
