@@ -29,6 +29,7 @@ import asyncio
 import logging
 import os
 import sys
+import traceback
 from dotenv import load_dotenv
 
 # Configure logging
@@ -104,7 +105,6 @@ def main():
     print()
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
-        from trulens.core import TruSession
         from snowflake.snowpark import Session
 
         # Configure Snowflake connection with SSO
@@ -190,21 +190,12 @@ def main():
         if hasattr(connector, 'snowpark_session'):
             print(f"  ✓ Connector has snowpark_session attribute")
         
-        # Initialize TruLens session with Snowflake connector
-        logger.info("Initializing TruSession with connector...")
-        session = TruSession(connector=connector)
-        logger.info("✓ TruLens session initialized")
-        
-        # Log session details
-        print(f"  Session Type: {type(session).__name__}")
-        print(f"  Session Connector: {type(session.connector).__name__}")
-        
         # Verify OTEL tracing is enabled
         otel_enabled = os.environ.get("TRULENS_OTEL_TRACING")
         print(f"  OTEL Tracing Enabled: {otel_enabled}")
         
         print()
-        logger.info("✓ TruLens configured to send traces to Snowflake")
+        logger.info("✓ SnowflakeConnector ready (will be passed to TruApp)")
         print("Configuration Summary:")
         print(f"  Account: {os.getenv('SNOWFLAKE_ACCOUNT')}")
         print(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
@@ -234,31 +225,82 @@ def main():
         logger.error(f"Failed to create MovieAgent: {e}")
         sys.exit(1)
 
-    # Run a simple recommendation to generate traces
-    logger.info("Running movie recommendation to generate traces...")
-    print("Prompt: 'Recommend a good sci-fi movie'")
+    # Wrap agent with TruApp
+    logger.info("Wrapping agent with TruApp for trace recording...")
+    try:
+        from trulens.apps.app import TruApp
+        from datetime import datetime
+
+        tru_app = TruApp(
+            agent,
+            app_name="movie_agent",
+            app_version="v1",
+            connector=connector
+        )
+        logger.info("✓ TruApp wrapper created successfully")
+        print(f"  App Name: movie_agent")
+        print(f"  App Version: v1")
+        print(f"  Connector: {type(connector).__name__}")
+        print()
+
+    except Exception as e:
+        logger.error(f"Failed to create TruApp wrapper: {e}")
+        sys.exit(1)
+
+    # Run multiple movie recommendations to generate traces
+    logger.info("Running movie recommendations to generate traces...")
     print()
 
-    try:
-        # Run async recommendation
-        result = asyncio.run(
-            agent.aget_recommendations("Recommend a good sci-fi movie")
-        )
+    # Create timestamped run name
+    run_name = f"movie_rec_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    logger.info(f"Using run name: {run_name}")
+    print()
 
-        if result.get("success"):
-            logger.info("✓ Recommendation completed successfully")
-            print("-" * 60)
-            print("RESPONSE:")
-            print("-" * 60)
-            print(result.get("response"))
-            print("-" * 60)
-            print()
-        else:
-            logger.error(f"Recommendation failed: {result.get('error')}")
+    # Define different movie queries
+    queries = [
+        "Recommend a good sci-fi movie",
+        "What are some great comedy movies from the 2020s?",
+        "Suggest a thriller movie with a twist ending"
+    ]
+
+    try:
+        # Define async function to run within live_run context
+        async def run_recommendations():
+            with tru_app.live_run(run_name=run_name) as live_run:
+                logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
+                
+                for i, query in enumerate(queries, 1):
+                    print(f"\n{'=' * 60}")
+                    print(f"QUERY {i}/{len(queries)}: {query}")
+                    print("=" * 60)
+                    logger.info(f"Processing query {i}: {query}")
+                    
+                    result = await agent.aget_recommendations(query)
+                    
+                    if result.get("success"):
+                        logger.info(f"✓ Query {i} completed successfully")
+                        print("-" * 60)
+                        print("RESPONSE:")
+                        print("-" * 60)
+                        print(result.get("response"))
+                        print("-" * 60)
+                        print()
+                    else:
+                        logger.error(f"Query {i} failed: {result.get('error')}")
+                        return False
+                
+                return True
+
+        # Run async recommendations within TruApp live_run context
+        success = asyncio.run(run_recommendations())
+
+        if not success:
+            logger.error("One or more recommendations failed")
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Error during recommendation: {e}")
+        logger.error(f"Error during recommendations: {e}")
+        logger.error(traceback.format_exc())
         sys.exit(1)
 
     # Confirmation
