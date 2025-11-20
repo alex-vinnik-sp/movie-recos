@@ -49,7 +49,7 @@ def main():
 
     # Load environment variables from .env file
     logger.info("Loading environment variables from .env file...")
-    load_dotenv()
+    load_dotenv(override=True)
 
     # Check for required Snowflake environment variables
     required_snowflake_vars = [
@@ -267,7 +267,7 @@ def main():
         # Define async function to process a single query
         async def process_query(query, index):
             """Process a single query and return result with index."""
-            logger.info(f"Starting query {index}: {query}")
+            logger.info(f"🔍 Starting query {index}: {query}")
             result = await agent.aget_recommendations(query)
             return (index, query, result)
 
@@ -325,7 +325,7 @@ def main():
     # Confirmation
     print()
     print("=" * 60)
-    logger.info("✓ Traces have been recorded to Snowflake!")
+    logger.info("🎉 Traces have been recorded to Snowflake!")
     print("=" * 60)
     print()
     print("Check your Snowflake database for trace records:")
