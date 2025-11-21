@@ -32,12 +32,24 @@ import sys
 import traceback
 from dotenv import load_dotenv
 
+# Custom filter to suppress tracebacks from specific loggers
+class SuppressTraceback(logging.Filter):
+    def filter(self, record):
+        # Suppress exc_info (traceback) for TruLens loggers
+        if record.name.startswith('trulens'):
+            record.exc_info = None
+            record.exc_text = None
+        return True
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Add traceback suppression filter to root logger
+logging.root.addFilter(SuppressTraceback())
 
 
 def main():
@@ -81,28 +93,25 @@ def main():
     logger.info("✓ All required environment variables found")
     print()
 
-    # Enable TruLens debug logging
-    print("-" * 60)
-    print("ENABLING DEBUG LOGGING")
-    print("-" * 60)
-    logging.getLogger("trulens").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.core").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.otel").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
-    logger.info("✓ TruLens debug logging enabled")
-    print()
+    # Configure TruLens logging (reduce connector noise)
+    # Set connectors and core.app to CRITICAL to suppress error tracebacks
+    logging.getLogger("trulens").setLevel(logging.WARNING)  # Reduce general trulens noise
+    logging.getLogger("trulens.core").setLevel(logging.WARNING)
+    logging.getLogger("trulens.core.app").setLevel(logging.CRITICAL)  # Suppress app tracebacks
+    logging.getLogger("trulens.connectors").setLevel(logging.CRITICAL)  # Suppress connector logs
+    logging.getLogger("trulens.connectors.snowflake").setLevel(logging.CRITICAL)  # Suppress tracebacks
+    logging.getLogger("trulens.connectors.snowflake.dao").setLevel(logging.CRITICAL)  # Suppress DAO errors
+    logging.getLogger("trulens.otel").setLevel(logging.WARNING)
+    logging.getLogger("trulens.providers").setLevel(logging.WARNING)
+    logger.info("✓ TruLens logging configured (tracebacks suppressed)")
 
     # Enable TruLens OTEL tracing
     os.environ["TRULENS_OTEL_TRACING"] = "1"
-    logger.info("✓ Enabled TruLens OTEL tracing environment variable")
-    print(f"  TRULENS_OTEL_TRACING = {os.environ.get('TRULENS_OTEL_TRACING')}")
-    print()
+    logger.info("✓ Enabled TruLens OTEL tracing (TRULENS_OTEL_TRACING=1)")
 
     # Initialize TruLens with Snowflake connector
     logger.info("Initializing TruLens with Snowflake connector...")
-    print("Note: A browser window will open for Snowflake authentication...")
-    print()
+    logger.info("Note: A browser window will open for Snowflake authentication")
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
         from snowflake.snowpark import Session
@@ -176,8 +185,24 @@ def main():
         print("-" * 60)
         logger.info("Initializing TruLens SnowflakeConnector...")
         
-        connector = SnowflakeConnector(snowpark_session=snowpark_session)
-        logger.info("✓ TruLens connector initialized")
+        # Configure use_account_event_table based on environment variable
+        # Both modes use OTEL tracing (@instrument decorators), but differ in storage:
+        # False (default): OTEL traces → TruLens traditional tables (supports feedback evaluation)
+        # True: OTEL traces → Snowflake native event tables (OpenTelemetry format, no feedback support)
+        use_account_event_table = os.getenv("TRULENS_USE_ACCOUNT_EVENT_TABLE", "false").lower() == "true"
+        
+        connector = SnowflakeConnector(
+            snowpark_session=snowpark_session,
+            use_account_event_table=use_account_event_table
+        )
+        
+        if use_account_event_table:
+            logger.info("✓ TruLens connector created (using Snowflake native OTEL event tables)")
+            logger.info("  OTEL traces will be stored in native OpenTelemetry format")
+            logger.warning("  Note: Feedback evaluation is NOT supported with account event tables")
+        else:
+            logger.info("✓ TruLens connector created (using traditional TruLens tables)")
+            logger.info("  OTEL traces + feedback results will be stored in TruLens schema")
         
         # Log connector details
         print(f"  Connector Type: {type(connector).__name__}")
@@ -193,6 +218,10 @@ def main():
         # Verify OTEL tracing is enabled
         otel_enabled = os.environ.get("TRULENS_OTEL_TRACING")
         print(f"  OTEL Tracing Enabled: {otel_enabled}")
+        
+        # Display table mode for OTEL traces
+        table_mode = "Snowflake native OTEL event tables (traces only)" if use_account_event_table else "Traditional TruLens tables (OTEL traces + feedbacks)"
+        print(f"  Table Mode: {table_mode}")
         
         print()
         logger.info("✓ SnowflakeConnector ready (will be passed to TruApp)")
@@ -225,6 +254,154 @@ def main():
         logger.error(f"Failed to create MovieAgent: {e}")
         sys.exit(1)
 
+    # Load MS MARCO BEIR dataset for ground truth evaluation demonstration
+    # NOTE: This is for educational/demonstration purposes only.
+    # The MovieAgent uses API calls (TMDB, Tavily) rather than traditional document retrieval,
+    # so IR metrics like NDCG@k are not directly applicable to the agent's architecture.
+    # This section demonstrates TruLens ground truth evaluation capabilities.
+    logger.info("Loading MS MARCO BEIR dataset for ground truth demonstration...")
+    try:
+        from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import (
+            TruBEIRDataLoader,
+        )
+
+        # Load a small subset of MS MARCO for demonstration
+        beir_loader = TruBEIRDataLoader(
+            data_folder="./beir_data", dataset_name="msmarco"
+        )
+        
+        logger.info("Downloading MS MARCO dataset (this may take a moment on first run)...")
+        msmarco_df = beir_loader.load_dataset_to_df(download=True)
+        
+        # Use only first 10 samples for quick demonstration
+        msmarco_sample = msmarco_df.head(10)
+        
+        logger.info(f"✓ Loaded {len(msmarco_sample)} MS MARCO samples for demonstration")
+        print(f"  Sample queries from MS MARCO:")
+        for idx, row in msmarco_sample.head(3).iterrows():
+            print(f"    - {row.get('query', 'N/A')}")
+        print()
+
+    except Exception as e:
+        logger.warning(f"Failed to load MS MARCO dataset: {e}")
+        logger.warning("Continuing without ground truth evaluation demonstration")
+        msmarco_sample = None
+
+    # Create ground truth feedback functions (demonstration only)
+    # NOTE: These feedback functions demonstrate TruLens capabilities but are not directly
+    # applicable to MovieAgent since it doesn't retrieve documents from a corpus.
+    ground_truth_feedbacks = []
+    
+    if msmarco_sample is not None:
+        try:
+            import json
+            from trulens.core import Feedback
+            from trulens.core.feedback.selector import Selector
+            from trulens.feedback import GroundTruthAgreement
+            from trulens.otel.semconv.trace import SpanAttributes
+            from trulens.providers.bedrock import Bedrock
+
+            logger.info("Creating ground truth feedback functions for demonstration...")
+            logger.info("Using Bedrock (Claude) as LLM judge for ground truth evaluation")
+
+            # Define OTEL-style selectors for the agent's aget_recommendations function
+            # These extract inputs/outputs from the traced spans
+            arg_query_selector = Selector(
+                span_attribute=f"{SpanAttributes.CALL.KWARGS}.user_prompt"
+            )
+            
+            arg_response_selector = Selector(
+                span_attributes_processor=lambda attrs: json.loads(
+                    attrs.get(SpanAttributes.CALL.RETURN, '{}')
+                ).get('response', '')
+            )
+
+            # Create ground truth feedback functions
+            # Note: These are for demonstration - MovieAgent doesn't have retrieval chunks
+            
+            # Initialize Bedrock provider for ground truth evaluation
+            bedrock_gt_provider = Bedrock(
+                model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                region_name=os.getenv("AWS_REGION", "us-east-1"),
+            )
+            
+            f_groundtruth_answer = Feedback(
+                GroundTruthAgreement(msmarco_sample, provider=bedrock_gt_provider).agreement_measure,
+                name="Ground Truth Answer Similarity (Demo)",
+            ).on({"prompt": arg_query_selector, "response": arg_response_selector})
+
+            ground_truth_feedbacks = [f_groundtruth_answer]
+            
+            logger.info(f"✓ Created {len(ground_truth_feedbacks)} ground truth feedback function(s): {[f.name for f in ground_truth_feedbacks]}")
+
+        except Exception as e:
+            logger.warning(f"Failed to create ground truth feedbacks: {e}")
+            logger.warning("Continuing without ground truth feedback functions")
+            ground_truth_feedbacks = []
+
+    # Create LLM-based feedback functions (using Bedrock Claude as judge)
+    # NOTE: These use an LLM to evaluate response quality - each evaluation costs an API call
+    llm_feedbacks = []
+    enable_llm_evals = os.getenv("ENABLE_LLM_EVALUATIONS", "false").lower() == "true"
+    
+    if enable_llm_evals:
+        logger.info("LLM evaluations enabled - creating feedback functions...")
+        try:
+            from trulens.providers.bedrock import Bedrock
+            
+            # Initialize Bedrock provider as the judge LLM
+            bedrock_judge = Bedrock(
+                model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                region_name=os.getenv("AWS_REGION", "us-east-1"),
+            )
+            
+            logger.info("✓ Bedrock judge LLM initialized")
+            
+            # Answer Relevance: Does the recommendation address the user's query?
+            f_relevance = Feedback(
+                bedrock_judge.relevance,
+                name="Movie Recommendation Relevance",
+            ).on_input_output()
+            
+            # Helpfulness: Is the recommendation helpful and actionable?
+            f_helpfulness = Feedback(
+                bedrock_judge.helpfulness,
+                name="Recommendation Helpfulness",
+            ).on_input_output()
+            
+            # Conciseness: Is the response clear and not overly verbose?
+            f_conciseness = Feedback(
+                bedrock_judge.conciseness,
+                name="Response Conciseness",
+            ).on_input_output()
+            
+            llm_feedbacks = [f_relevance, f_helpfulness, f_conciseness]
+            
+            logger.info(f"✓ Created {len(llm_feedbacks)} LLM-based feedback function(s): {[f.name for f in llm_feedbacks]}")
+            logger.info("Judge LLM: Claude 3.5 Sonnet (Bedrock)")
+            logger.warning("⚠️  Each evaluation makes an LLM API call (cost applies)")
+            
+        except Exception as e:
+            logger.warning(f"Failed to create LLM-based feedbacks: {e}")
+            logger.warning("Continuing without LLM feedback functions")
+            llm_feedbacks = []
+    else:
+        logger.info("LLM evaluations disabled (set ENABLE_LLM_EVALUATIONS=true in .env to enable)")
+
+    # Combine all feedbacks
+    all_feedbacks = llm_feedbacks
+    
+    # Check if feedbacks are compatible with current table mode
+    if all_feedbacks and use_account_event_table:
+        logger.warning("⚠️  Feedback functions configured but OTEL + account event tables mode is enabled")
+        logger.warning("   TruLens limitation: Feedback evaluation NOT supported with OTEL + native event tables")
+        logger.warning("   Set TRULENS_USE_ACCOUNT_EVENT_TABLE=false to enable OTEL traces + feedbacks")
+        logger.warning("   Disabling feedbacks to avoid initialization errors")
+        all_feedbacks = []
+    elif all_feedbacks:
+        logger.info(f"Total feedbacks configured: {len(all_feedbacks)}")
+        logger.info(f"  Feedbacks will be evaluated during live_run()")
+
     # Wrap agent with TruApp
     logger.info("Wrapping agent with TruApp for trace recording...")
     try:
@@ -235,16 +412,19 @@ def main():
             agent,
             app_name="movie_agent",
             app_version="v1",
-            connector=connector
+            connector=connector,
+            feedbacks=all_feedbacks
         )
-        logger.info("✓ TruApp wrapper created successfully")
-        print(f"  App Name: movie_agent")
-        print(f"  App Version: v1")
-        print(f"  Connector: {type(connector).__name__}")
-        print()
+        logger.info("✓ TruApp wrapper created successfully (app_name=movie_agent, version=v1)")
+        logger.info(f"Connector: {type(connector).__name__}")
+        if all_feedbacks:
+            logger.info(f"Total Feedbacks: {len(all_feedbacks)}")
+            for fb in all_feedbacks:
+                logger.info(f"  - {fb.name}")
 
     except Exception as e:
         logger.error(f"Failed to create TruApp wrapper: {e}")
+        logger.error(traceback.format_exc())
         sys.exit(1)
 
     # Run multiple movie recommendations to generate traces
@@ -256,11 +436,11 @@ def main():
     logger.info(f"Using run name: {run_name}")
     print()
 
-    # Define different movie queries
+    # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        "What are some great comedy movies from the 2020s?",
-        "Suggest a thriller movie with a twist ending"
+        # "What are some great comedy movies from the 2020s?",
+        # "Suggest a thriller movie with a twist ending"
     ]
 
     try:

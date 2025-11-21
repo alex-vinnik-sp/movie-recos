@@ -33,9 +33,10 @@ uv sync
 ```
 
 This installs:
-- `trulens-core`, `trulens-connectors-snowflake`, `trulens-apps-langgraph`
-- `snowflake-connector-python[pandas]` with PyArrow
+- `trulens-core`, `trulens-connectors-snowflake`, `trulens-apps-langgraph`, `trulens-benchmark`
+- `snowflake-connector-python[pandas]` with PyArrow and secure-local-storage
 - LangGraph, LangChain, AWS Bedrock dependencies
+- MS MARCO BEIR dataset (downloaded on first run, ~200MB)
 
 ### 2. Configure Environment Variables
 
@@ -50,6 +51,9 @@ SNOWFLAKE_SCHEMA=your-schema
 SNOWFLAKE_WAREHOUSE=your-warehouse
 SNOWFLAKE_ROLE=SYSADMIN  # Optional, defaults to SYSADMIN
 
+# TruLens Configuration
+TRULENS_USE_ACCOUNT_EVENT_TABLE=false  # false = traditional tables (OTEL + feedbacks), true = native OTEL event tables (traces only, no feedbacks)
+
 # API Keys
 TMDB_API_KEY=your-tmdb-api-key
 TAVILY_API_KEY=your-tavily-api-key
@@ -57,6 +61,9 @@ TAVILY_API_KEY=your-tavily-api-key
 # AWS Configuration (for Bedrock)
 AWS_REGION=us-east-1  # Optional, defaults to us-east-1
 AWS_PROFILE=your-profile  # Optional
+
+# LLM-Based Evaluations (Optional)
+ENABLE_LLM_EVALUATIONS=false  # Set to 'true' to enable LLM-based feedback evaluations
 ```
 
 **Note:** Uses external browser authentication (SSO/OAuth) for Snowflake - no password needed!
@@ -120,30 +127,27 @@ TRULENS CONNECTOR DIAGNOSTICS
   Connector Type: SnowflakeConnector
   ✓ Connector has snowpark_session attribute
   OTEL Tracing Enabled: 1
+  Table Mode: Traditional TruLens tables (OTEL traces + feedbacks)
 
 ✓ MovieAgent created successfully
 ✓ TruApp wrapper created successfully
 
 =============================================================
-RUNNING 3 QUERIES IN PARALLEL
+RUNNING 1 QUERIES IN PARALLEL
 =============================================================
 
 🔍 Starting query 1: Recommend a good sci-fi movie
-🔍 Starting query 2: What are some great comedy movies from the 2020s?
-🔍 Starting query 3: Suggest a thriller movie with a twist ending
 
 ✓ All queries completed
 
 =============================================================
-QUERY 1/3: Recommend a good sci-fi movie
+QUERY 1/1: Recommend a good sci-fi movie
 =============================================================
 ------------------------------------------------------------
 RESPONSE:
 ------------------------------------------------------------
 [Movie recommendations...]
 ------------------------------------------------------------
-
-... [additional queries] ...
 
 =============================================================
 🎉 Traces have been recorded to Snowflake!
@@ -152,10 +156,11 @@ RESPONSE:
 
 ## 🔍 Key Features
 
-### ✅ Parallel Query Execution
-- All 3 queries run concurrently using `asyncio.gather()`
-- Faster overall execution
-- Realistic concurrent trace recording
+### ✅ Parallel Query Execution Support
+- Configured to run 1 query by default
+- Supports running multiple queries concurrently using `asyncio.gather()`
+- To enable multiple queries: uncomment additional queries in the `queries` list
+- All queries in the list will run in parallel for faster execution
 
 ### ✅ External Browser Authentication
 - Uses SSO/OAuth for Snowflake
@@ -172,6 +177,53 @@ RESPONSE:
 - Wraps LangGraph agent with TruApp
 - Uses `live_run()` context for proper trace recording
 - Automatic instrumentation via `@instrument` decorators
+
+### ✅ MS MARCO Ground Truth Evaluation (Demonstration)
+- Loads BEIR MS MARCO benchmark dataset
+- Demonstrates TruLens ground truth evaluation capabilities
+- Creates feedback functions for semantic similarity
+- **Educational Purpose:** Shows evaluation features, but note that MovieAgent uses APIs (TMDB, Tavily) rather than traditional document retrieval, so IR metrics aren't directly applicable
+
+**Learn More:**
+- [BEIR Benchmark](https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/)
+- [TruLens Ground Truth Evaluation](https://www.trulens.org/getting_started/quickstarts/groundtruth_evals_for_retrieval_systems/)
+
+### ✅ LLM-Based Evaluations (Optional)
+The CLI includes optional LLM-based feedback evaluation using AWS Bedrock Claude as a judge:
+- **Feedback Functions Available:**
+  - **Answer Relevance**: Does the recommendation address the user's query?
+  - **Helpfulness**: Is the recommendation helpful and actionable?
+  - **Conciseness**: Is the response clear and not overly verbose?
+
+**How to Enable:** Set `ENABLE_LLM_EVALUATIONS=true` in your `.env` file.
+
+**How it works:**
+1. Your app generates a movie recommendation
+2. TruLens sends the input/output to Claude (judge LLM)
+3. Claude scores the quality (0-10) with reasoning
+4. Scores stored in Snowflake for tracking
+
+**Note:** Each LLM evaluation makes an API call to Claude, which incurs costs. Use judiciously.
+
+### 🗄️ Choosing Your Table Mode
+
+The `TRULENS_USE_ACCOUNT_EVENT_TABLE` environment variable controls which database schema TruLens uses for storing OTEL traces:
+
+**Traditional Tables Mode (default, `TRULENS_USE_ACCOUNT_EVENT_TABLE=false`):**
+- ✅ **Use when:** You need feedback evaluation (ground truth or LLM-based)
+- ✅ **Best for:** Development, testing, and production with evaluations
+- Creates TruLens-specific tables in your Snowflake schema
+- Stores OTEL traces in traditional table format
+- Supports both OTEL traces AND feedback results
+- Works with OTEL `@instrument` decorators
+
+**Native Event Tables Mode (`TRULENS_USE_ACCOUNT_EVENT_TABLE=true`):**
+- ✅ **Use when:** You only need OTEL trace collection (no evaluations)
+- ✅ **Best for:** Integration with Snowflake's native OTEL infrastructure
+- Uses Snowflake's account-level event tables (e.g., `SNOWFLAKE.TELEMETRY.EVENTS`)
+- Stores OTEL traces in Snowflake's native OpenTelemetry format
+- Works with OTEL `@instrument` decorators
+- ❌ Feedback evaluation NOT supported in this mode (TruLens limitation)
 
 ## 🛠️ Troubleshooting
 
@@ -200,18 +252,30 @@ TruLens Debug Logging (enabled)
     ↓
 Snowpark Session (SSO auth)
     ↓
-SnowflakeConnector
+SnowflakeConnector (use_account_event_table=False)
     ↓
 MovieAgent (LangGraph)
     ↓
-TruApp(agent, connector)
+TruApp(agent, connector, feedbacks)
     ↓
 live_run() context
     ↓
-3 parallel queries (asyncio.gather)
+Query execution (1+ queries, asyncio.gather)
     ↓
-Traces → Snowflake Tables
+Traces + Feedback Results → Snowflake Tables
 ```
+
+**Database Schema & OTEL Tracing:**
+- Both modes use OTEL tracing via `@instrument` decorators (enabled by `TRULENS_OTEL_TRACING=1`)
+- Table mode is configurable via `TRULENS_USE_ACCOUNT_EVENT_TABLE` environment variable
+- **Default (false)**: TruLens traditional tables
+  - ✅ OTEL traces stored in TruLens's custom schema
+  - ✅ Supports feedback evaluation alongside OTEL traces
+  - ✅ Both trace collection AND feedback evaluation
+- **Optional (true)**: Snowflake native event tables
+  - ✅ OTEL traces stored in Snowflake's native OpenTelemetry format
+  - ✅ Uses account-level event tables (e.g., `SNOWFLAKE.TELEMETRY.EVENTS`)
+  - ❌ Feedback evaluation NOT supported (TruLens limitation with OTEL + native tables)
 
 ## 🔗 Related Files
 
@@ -224,7 +288,25 @@ Traces → Snowflake Tables
 - The `.env` file overrides system environment variables
 - TruLens tables are created automatically on first run
 - Each run has a timestamped name: `movie_rec_YYYY-MM-DD_HH-MM-SS`
-- All traces from the 3 queries are grouped under one run
+- All traces from the queries are grouped under one run (1 query by default, more can be added)
+- **OTEL + Table Mode**: OTEL tracing is always enabled. Set `TRULENS_USE_ACCOUNT_EVENT_TABLE=false` (default) for OTEL traces + feedback support, or `true` for OTEL traces in native Snowflake event tables only
+
+### About MS MARCO Ground Truth Evaluation
+
+The MS MARCO BEIR dataset integration is included for **educational/demonstration purposes** to showcase TruLens ground truth evaluation capabilities. 
+
+**Important:** MovieAgent is not a traditional Information Retrieval (IR) system:
+- ✅ MovieAgent makes API calls to TMDB and Tavily
+- ✅ Uses LLM to generate conversational recommendations
+- ❌ Does NOT retrieve documents from a static corpus
+- ❌ Does NOT rank retrieved documents
+
+Traditional IR metrics like NDCG@k, IR Hit Rate, and Recall@k are designed for document retrieval systems. While they're included here to demonstrate TruLens features, they don't directly evaluate the MovieAgent's actual architecture.
+
+For more appropriate MovieAgent evaluation, consider:
+- LLM-based evaluations (answer relevance, helpfulness)
+- User feedback collection
+- Custom ground truth datasets with movie Q&A pairs
 
 ## 🎬 Next Steps
 
