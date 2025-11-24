@@ -211,6 +211,36 @@ The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judg
 
 **Note:** Each evaluation makes an API call to Claude, which incurs costs. Use judiciously.
 
+### ⚡ Inline Evaluations (Real-Time)
+
+**What are Inline Evaluations?**
+
+Inline evaluations assess agent behavior in real-time during execution, rather than after the fact. When enabled with `ENABLE_EVALUATIONS=true`, the CLI automatically adds inline context relevance evaluation to retrieval operations.
+
+**Where are they used?**
+- **Web Search Tool** (`src/tools/websearch.py`): Evaluates web search result relevance
+- **TMDB Movie Details Tool** (`src/tools/tmdb.py`): Evaluates movie information retrieval quality
+
+**How it works:**
+1. Agent calls a retrieval tool (e.g., web search for movie reviews)
+2. `@inline_evaluation` decorator captures the query and retrieved contexts
+3. Claude (judge LLM) scores context relevance in real-time
+4. Evaluation result is added to the agent's LangGraph state as a message
+5. Agent can use this feedback to adjust behavior (e.g., retry with better query)
+
+**Benefits:**
+- **Immediate feedback**: Agent knows retrieval quality before moving to next step
+- **Self-aware agents**: Can detect poor retrievals and retry/refine
+- **Better orchestration**: Agent state includes evaluation scores for decision-making
+
+**Technical Details:**
+- Uses TruLens `@inline_evaluation` decorator from `trulens.apps.langgraph.inline_evaluations`
+- Evaluation results stored as `AnyMessage` objects in LangGraph `MessageState`
+- Requires `ENABLE_EVALUATIONS=true` and `TRULENS_USE_ACCOUNT_EVENT_TABLE=false`
+- Each inline evaluation makes a Claude API call (has cost implications)
+
+**Reference:** [TruLens Inline Evaluations Documentation](https://www.trulens.org/component_guides/runtime_evaluation/inline_evals/)
+
 ### 🗄️ Choosing Your Table Mode
 
 The `TRULENS_USE_ACCOUNT_EVENT_TABLE` environment variable controls which database schema TruLens uses for storing OTEL traces:

@@ -416,7 +416,7 @@ def main():
             app_name="movie_agent",
             app_version="v1",
             connector=connector,
-            feedbacks=all_feedbacks
+            #feedbacks=all_feedbacks
         )
         logger.info("✓ TruApp wrapper created successfully (app_name=movie_agent, version=v1)")
         logger.info(f"Connector: {type(connector).__name__}")
@@ -442,8 +442,8 @@ def main():
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        # "What are some great comedy movies from the 2020s?",
-        # "Suggest a thriller movie with a twist ending"
+        "What are some great comedy movies from the 2020s?",
+        "Suggest a thriller movie with a twist ending"
     ]
 
     try:

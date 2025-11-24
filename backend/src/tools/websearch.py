@@ -1,14 +1,48 @@
 """Web search tool using Tavily API."""
 import json
 import logging
+import os
 from typing import Type
+import numpy as np
 import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 from trulens.core.otel.instrument import instrument
 from trulens.otel.semconv.trace import SpanAttributes
+from trulens.core import Feedback
+from trulens.core.feedback.selector import Selector
+from trulens.apps.langgraph.inline_evaluations import inline_evaluation
+from trulens.providers.bedrock import Bedrock
 
 logger = logging.getLogger(__name__)
+
+# Initialize Bedrock provider for inline evaluations
+_bedrock_provider = Bedrock(
+    model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+    region_name=os.getenv("AWS_REGION", "us-east-1"),
+)
+
+# Define context relevance feedback function for inline evaluation
+f_context_relevance = (
+    Feedback(
+        _bedrock_provider.context_relevance_with_cot_reasons,
+        name="Inline Context Relevance (Web Search)"
+    )
+    .on({
+        "question": Selector(
+            span_type=SpanAttributes.SpanType.RETRIEVAL,
+            span_attribute=SpanAttributes.RETRIEVAL.QUERY_TEXT,
+        )
+    })
+    .on({
+        "context": Selector(
+            span_type=SpanAttributes.SpanType.RETRIEVAL,
+            span_attribute=SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS,
+            collect_list=False
+        )
+    })
+    .aggregate(np.mean)
+)
 
 
 class WebSearchInput(BaseModel):
@@ -29,6 +63,7 @@ class WebSearchTool(BaseTool):
     api_key: str
 
 
+    @inline_evaluation(f_context_relevance)
     @instrument(
         span_type=SpanAttributes.SpanType.RETRIEVAL,
         attributes={
