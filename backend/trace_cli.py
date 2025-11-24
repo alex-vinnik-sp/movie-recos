@@ -105,9 +105,16 @@ def main():
     logging.getLogger("trulens.providers").setLevel(logging.WARNING)
     logger.info("✓ TruLens logging configured (tracebacks suppressed)")
 
-    # Enable TruLens OTEL tracing
-    os.environ["TRULENS_OTEL_TRACING"] = "1"
-    logger.info("✓ Enabled TruLens OTEL tracing (TRULENS_OTEL_TRACING=1)")
+    # Check TruLens OTEL tracing configuration (default: enabled)
+    # User can set TRULENS_OTEL_TRACING=false in .env to disable
+    otel_tracing_enabled = os.getenv("TRULENS_OTEL_TRACING", "true").lower() == "true"
+    
+    if otel_tracing_enabled:
+        logger.info("✓ TruLens OTEL tracing enabled (TRULENS_OTEL_TRACING=true)")
+        logger.info("  @instrument decorators will capture traces")
+    else:
+        logger.warning("⚠️  TruLens OTEL tracing disabled (TRULENS_OTEL_TRACING=false)")
+        logger.warning("   @instrument decorators will not capture traces")
 
     # Initialize TruLens with Snowflake connector
     logger.info("Initializing TruLens with Snowflake connector...")
@@ -254,98 +261,93 @@ def main():
         logger.error(f"Failed to create MovieAgent: {e}")
         sys.exit(1)
 
-    # Load MS MARCO BEIR dataset for ground truth evaluation demonstration
-    # NOTE: This is for educational/demonstration purposes only.
-    # The MovieAgent uses API calls (TMDB, Tavily) rather than traditional document retrieval,
-    # so IR metrics like NDCG@k are not directly applicable to the agent's architecture.
-    # This section demonstrates TruLens ground truth evaluation capabilities.
-    logger.info("Loading MS MARCO BEIR dataset for ground truth demonstration...")
-    try:
-        from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import (
-            TruBEIRDataLoader,
-        )
-
-        # Load a small subset of MS MARCO for demonstration
-        beir_loader = TruBEIRDataLoader(
-            data_folder="./beir_data", dataset_name="msmarco"
-        )
-        
-        logger.info("Downloading MS MARCO dataset (this may take a moment on first run)...")
-        msmarco_df = beir_loader.load_dataset_to_df(download=True)
-        
-        # Use only first 10 samples for quick demonstration
-        msmarco_sample = msmarco_df.head(10)
-        
-        logger.info(f"✓ Loaded {len(msmarco_sample)} MS MARCO samples for demonstration")
-        print(f"  Sample queries from MS MARCO:")
-        for idx, row in msmarco_sample.head(3).iterrows():
-            print(f"    - {row.get('query', 'N/A')}")
-        print()
-
-    except Exception as e:
-        logger.warning(f"Failed to load MS MARCO dataset: {e}")
-        logger.warning("Continuing without ground truth evaluation demonstration")
-        msmarco_sample = None
-
-    # Create ground truth feedback functions (demonstration only)
-    # NOTE: These feedback functions demonstrate TruLens capabilities but are not directly
-    # applicable to MovieAgent since it doesn't retrieve documents from a corpus.
-    ground_truth_feedbacks = []
-    
-    if msmarco_sample is not None:
-        try:
-            import json
-            from trulens.core import Feedback
-            from trulens.core.feedback.selector import Selector
-            from trulens.feedback import GroundTruthAgreement
-            from trulens.otel.semconv.trace import SpanAttributes
-            from trulens.providers.bedrock import Bedrock
-
-            logger.info("Creating ground truth feedback functions for demonstration...")
-            logger.info("Using Bedrock (Claude) as LLM judge for ground truth evaluation")
-
-            # Define OTEL-style selectors for the agent's aget_recommendations function
-            # These extract inputs/outputs from the traced spans
-            arg_query_selector = Selector(
-                span_attribute=f"{SpanAttributes.CALL.KWARGS}.user_prompt"
-            )
-            
-            arg_response_selector = Selector(
-                span_attributes_processor=lambda attrs: json.loads(
-                    attrs.get(SpanAttributes.CALL.RETURN, '{}')
-                ).get('response', '')
-            )
-
-            # Create ground truth feedback functions
-            # Note: These are for demonstration - MovieAgent doesn't have retrieval chunks
-            
-            # Initialize Bedrock provider for ground truth evaluation
-            bedrock_gt_provider = Bedrock(
-                model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
-                region_name=os.getenv("AWS_REGION", "us-east-1"),
-            )
-            
-            f_groundtruth_answer = Feedback(
-                GroundTruthAgreement(msmarco_sample, provider=bedrock_gt_provider).agreement_measure,
-                name="Ground Truth Answer Similarity (Demo)",
-            ).on({"prompt": arg_query_selector, "response": arg_response_selector})
-
-            ground_truth_feedbacks = [f_groundtruth_answer]
-            
-            logger.info(f"✓ Created {len(ground_truth_feedbacks)} ground truth feedback function(s): {[f.name for f in ground_truth_feedbacks]}")
-
-        except Exception as e:
-            logger.warning(f"Failed to create ground truth feedbacks: {e}")
-            logger.warning("Continuing without ground truth feedback functions")
-            ground_truth_feedbacks = []
-
-    # Create LLM-based feedback functions (using Bedrock Claude as judge)
+    # Create LLM-based and ground truth feedback functions (using Bedrock Claude as judge)
     # NOTE: These use an LLM to evaluate response quality - each evaluation costs an API call
+    ground_truth_feedbacks = []
     llm_feedbacks = []
-    enable_llm_evals = os.getenv("ENABLE_LLM_EVALUATIONS", "false").lower() == "true"
+    enable_llm_evals = os.getenv("ENABLE_EVALUATIONS", "false").lower() == "true"
     
     if enable_llm_evals:
-        logger.info("LLM evaluations enabled - creating feedback functions...")
+        logger.info("Evaluations enabled - creating feedback functions (ground truth + LLM-based)...")
+        
+        # Load MS MARCO BEIR dataset for ground truth evaluation demonstration
+        # NOTE: This is for educational/demonstration purposes only.
+        # The MovieAgent uses API calls (TMDB, Tavily) rather than traditional document retrieval,
+        # so IR metrics like NDCG@k are not directly applicable to the agent's architecture.
+        # This section demonstrates TruLens ground truth evaluation capabilities.
+        logger.info("Loading MS MARCO BEIR dataset for ground truth demonstration...")
+        msmarco_sample = None
+        try:
+            from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import (
+                TruBEIRDataLoader,
+            )
+
+            # Load a small subset of MS MARCO for demonstration
+            beir_loader = TruBEIRDataLoader(
+                data_folder="./beir_data", dataset_name="msmarco"
+            )
+            
+            logger.info("Downloading MS MARCO dataset (this may take a moment on first run)...")
+            msmarco_df = beir_loader.load_dataset_to_df(download=True)
+            
+            # Use only first 10 samples for quick demonstration
+            msmarco_sample = msmarco_df.head(10)
+            
+            logger.info(f"✓ Loaded {len(msmarco_sample)} MS MARCO samples for demonstration")
+            print(f"  Sample queries from MS MARCO:")
+            for idx, row in msmarco_sample.head(3).iterrows():
+                print(f"    - {row.get('query', 'N/A')}")
+            print()
+
+        except Exception as e:
+            logger.warning(f"Failed to load MS MARCO dataset: {e}")
+            logger.warning("Continuing without ground truth evaluation")
+        
+        # Create ground truth feedback functions if MS MARCO loaded successfully
+        if msmarco_sample is not None:
+            try:
+                import json
+                from trulens.core import Feedback
+                from trulens.core.feedback.selector import Selector
+                from trulens.feedback import GroundTruthAgreement
+                from trulens.otel.semconv.trace import SpanAttributes
+                from trulens.providers.bedrock import Bedrock as BedrockGT
+
+                logger.info("Creating ground truth feedback functions for demonstration...")
+                logger.info("Using Bedrock (Claude) as LLM judge for ground truth evaluation")
+
+                # Define OTEL-style selectors for the agent's aget_recommendations function
+                # These extract inputs/outputs from the traced spans
+                arg_query_selector = Selector(
+                    span_attribute=f"{SpanAttributes.CALL.KWARGS}.user_prompt"
+                )
+                
+                arg_response_selector = Selector(
+                    span_attributes_processor=lambda attrs: json.loads(
+                        attrs.get(SpanAttributes.CALL.RETURN, '{}')
+                    ).get('response', '')
+                )
+
+                # Initialize Bedrock provider for ground truth evaluation
+                bedrock_gt_provider = BedrockGT(
+                    model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    region_name=os.getenv("AWS_REGION", "us-east-1"),
+                )
+                
+                f_groundtruth_answer = Feedback(
+                    GroundTruthAgreement(msmarco_sample, provider=bedrock_gt_provider).agreement_measure,
+                    name="Ground Truth Answer Similarity (Demo)",
+                ).on({"prompt": arg_query_selector, "response": arg_response_selector})
+
+                ground_truth_feedbacks = [f_groundtruth_answer]
+                
+                logger.info(f"✓ Created {len(ground_truth_feedbacks)} ground truth feedback function(s): {[f.name for f in ground_truth_feedbacks]}")
+
+            except Exception as e:
+                logger.warning(f"Failed to create ground truth feedbacks: {e}")
+                logger.warning("Continuing without ground truth feedback functions")
+        
+        # Create LLM-based feedback functions
         try:
             from trulens.providers.bedrock import Bedrock
             
@@ -386,10 +388,11 @@ def main():
             logger.warning("Continuing without LLM feedback functions")
             llm_feedbacks = []
     else:
-        logger.info("LLM evaluations disabled (set ENABLE_LLM_EVALUATIONS=true in .env to enable)")
+        logger.info("Evaluations disabled (set ENABLE_EVALUATIONS=true in .env to enable)")
+        logger.info("  Note: This disables both ground truth and LLM-based feedback evaluations")
 
-    # Combine all feedbacks
-    all_feedbacks = llm_feedbacks
+    # Combine all feedbacks (ground truth + LLM-based)
+    all_feedbacks = ground_truth_feedbacks + llm_feedbacks
     
     # Check if feedbacks are compatible with current table mode
     if all_feedbacks and use_account_event_table:

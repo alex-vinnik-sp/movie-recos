@@ -52,6 +52,7 @@ SNOWFLAKE_WAREHOUSE=your-warehouse
 SNOWFLAKE_ROLE=SYSADMIN  # Optional, defaults to SYSADMIN
 
 # TruLens Configuration
+TRULENS_OTEL_TRACING=true  # true = enabled (default), false = disabled
 TRULENS_USE_ACCOUNT_EVENT_TABLE=false  # false = traditional tables (OTEL + feedbacks), true = native OTEL event tables (traces only, no feedbacks)
 
 # API Keys
@@ -62,8 +63,8 @@ TAVILY_API_KEY=your-tavily-api-key
 AWS_REGION=us-east-1  # Optional, defaults to us-east-1
 AWS_PROFILE=your-profile  # Optional
 
-# LLM-Based Evaluations (Optional)
-ENABLE_LLM_EVALUATIONS=false  # Set to 'true' to enable LLM-based feedback evaluations
+# Evaluations (Optional)
+ENABLE_EVALUATIONS=false  # Set to 'true' to enable feedback evaluations (ground truth + LLM-based)
 ```
 
 **Note:** Uses external browser authentication (SSO/OAuth) for Snowflake - no password needed!
@@ -188,14 +189,19 @@ RESPONSE:
 - [BEIR Benchmark](https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/)
 - [TruLens Ground Truth Evaluation](https://www.trulens.org/getting_started/quickstarts/groundtruth_evals_for_retrieval_systems/)
 
-### ✅ LLM-Based Evaluations (Optional)
-The CLI includes optional LLM-based feedback evaluation using AWS Bedrock Claude as a judge:
-- **Feedback Functions Available:**
-  - **Answer Relevance**: Does the recommendation address the user's query?
-  - **Helpfulness**: Is the recommendation helpful and actionable?
-  - **Conciseness**: Is the response clear and not overly verbose?
+### ✅ Feedback Evaluations (Optional)
+The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judge:
 
-**How to Enable:** Set `ENABLE_LLM_EVALUATIONS=true` in your `.env` file.
+**How to Enable:** Set `ENABLE_EVALUATIONS=true` in your `.env` file.
+
+**What's Included:**
+1. **Ground Truth Evaluation** (MS MARCO dataset)
+   - Demonstrates TruLens ground truth evaluation capabilities
+   - Compares responses against reference answers using LLM judge
+2. **LLM-Based Evaluations**
+   - **Answer Relevance**: Does the recommendation address the user's query?
+   - **Helpfulness**: Is the recommendation helpful and actionable?
+   - **Conciseness**: Is the response clear and not overly verbose?
 
 **How it works:**
 1. Your app generates a movie recommendation
@@ -203,7 +209,7 @@ The CLI includes optional LLM-based feedback evaluation using AWS Bedrock Claude
 3. Claude scores the quality (0-10) with reasoning
 4. Scores stored in Snowflake for tracking
 
-**Note:** Each LLM evaluation makes an API call to Claude, which incurs costs. Use judiciously.
+**Note:** Each evaluation makes an API call to Claude, which incurs costs. Use judiciously.
 
 ### 🗄️ Choosing Your Table Mode
 
@@ -289,7 +295,8 @@ Traces + Feedback Results → Snowflake Tables
 - TruLens tables are created automatically on first run
 - Each run has a timestamped name: `movie_rec_YYYY-MM-DD_HH-MM-SS`
 - All traces from the queries are grouped under one run (1 query by default, more can be added)
-- **OTEL + Table Mode**: OTEL tracing is always enabled. Set `TRULENS_USE_ACCOUNT_EVENT_TABLE=false` (default) for OTEL traces + feedback support, or `true` for OTEL traces in native Snowflake event tables only
+- **OTEL Tracing**: Enabled by default (`TRULENS_OTEL_TRACING=true`). The `@instrument` decorators capture function calls, inputs, and outputs. Set to `false` only if you don't want any tracing.
+- **Table Mode**: When OTEL tracing is enabled, set `TRULENS_USE_ACCOUNT_EVENT_TABLE=false` (default) for OTEL traces + feedback support, or `true` for OTEL traces in native Snowflake event tables only
 
 ### About MS MARCO Ground Truth Evaluation
 
