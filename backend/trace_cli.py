@@ -106,6 +106,14 @@ def main():
     logging.getLogger("trulens.providers").setLevel(logging.WARNING)
     logger.info("✓ TruLens logging configured (tracebacks suppressed)")
 
+    # Enable TruLens debug logging if requested
+    if os.getenv("DEBUG_TRULENS", "").lower() == "true":
+        logging.getLogger("trulens").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.core").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
+        logger.info("✓ TruLens debug logging enabled (DEBUG_TRULENS=true)")
+
     # Check TruLens OTEL tracing configuration (default: enabled)
     # User can set TRULENS_OTEL_TRACING=false in .env to disable
     otel_tracing_enabled = os.getenv("TRULENS_OTEL_TRACING", "true").lower() == "true"
