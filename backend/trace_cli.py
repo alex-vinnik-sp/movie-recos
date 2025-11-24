@@ -30,6 +30,7 @@ import logging
 import os
 import sys
 import traceback
+import numpy as np
 from dotenv import load_dotenv
 
 # Custom filter to suppress tracebacks from specific loggers
@@ -231,7 +232,7 @@ def main():
         print(f"  Table Mode: {table_mode}")
         
         print()
-        logger.info("✓ SnowflakeConnector ready (will be passed to TruApp)")
+        logger.info("✓ SnowflakeConnector ready (will be passed to TruGraph)")
         print("Configuration Summary:")
         print(f"  Account: {os.getenv('SNOWFLAKE_ACCOUNT')}")
         print(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
@@ -306,27 +307,12 @@ def main():
         # Create ground truth feedback functions if MS MARCO loaded successfully
         if msmarco_sample is not None:
             try:
-                import json
                 from trulens.core import Feedback
-                from trulens.core.feedback.selector import Selector
                 from trulens.feedback import GroundTruthAgreement
-                from trulens.otel.semconv.trace import SpanAttributes
                 from trulens.providers.bedrock import Bedrock as BedrockGT
 
                 logger.info("Creating ground truth feedback functions for demonstration...")
                 logger.info("Using Bedrock (Claude) as LLM judge for ground truth evaluation")
-
-                # Define OTEL-style selectors for the agent's aget_recommendations function
-                # These extract inputs/outputs from the traced spans
-                arg_query_selector = Selector(
-                    span_attribute=f"{SpanAttributes.CALL.KWARGS}.user_prompt"
-                )
-                
-                arg_response_selector = Selector(
-                    span_attributes_processor=lambda attrs: json.loads(
-                        attrs.get(SpanAttributes.CALL.RETURN, '{}')
-                    ).get('response', '')
-                )
 
                 # Initialize Bedrock provider for ground truth evaluation
                 bedrock_gt_provider = BedrockGT(
@@ -334,10 +320,20 @@ def main():
                     region_name=os.getenv("AWS_REGION", "us-east-1"),
                 )
                 
+                # Create GroundTruthAgreement with MS MARCO dataset
+                # MS MARCO DataFrame has columns: query, expected_response, expected_chunks
+                # This measures semantic similarity between agent response and ground truth
+                ground_truth_agreement = GroundTruthAgreement(
+                    msmarco_sample, 
+                    provider=bedrock_gt_provider
+                )
+                
+                # Standard pattern: use .on_input_output() for input/output comparison
+                # This automatically maps to the root span's input/output
                 f_groundtruth_answer = Feedback(
-                    GroundTruthAgreement(msmarco_sample, provider=bedrock_gt_provider).agreement_measure,
+                    ground_truth_agreement.agreement_measure,
                     name="Ground Truth Answer Similarity (Demo)",
-                ).on({"prompt": arg_query_selector, "response": arg_response_selector})
+                ).on_input_output()
 
                 ground_truth_feedbacks = [f_groundtruth_answer]
                 
@@ -350,6 +346,7 @@ def main():
         # Create LLM-based feedback functions
         try:
             from trulens.providers.bedrock import Bedrock
+            from trulens.otel.semconv.trace import SpanAttributes
             
             # Initialize Bedrock provider as the judge LLM
             bedrock_judge = Bedrock(
@@ -369,13 +366,13 @@ def main():
             f_helpfulness = Feedback(
                 bedrock_judge.helpfulness,
                 name="Recommendation Helpfulness",
-            ).on_input_output()
+            ).on_output()
             
             # Conciseness: Is the response clear and not overly verbose?
             f_conciseness = Feedback(
                 bedrock_judge.conciseness,
                 name="Response Conciseness",
-            ).on_input_output()
+            ).on_output()
             
             # Groundedness: Is the recommendation grounded in retrieved contexts?
             # This uses OTEL selectors to get contexts from RETRIEVAL spans
@@ -407,7 +404,30 @@ def main():
                 })
             )
             
-            llm_feedbacks = [f_relevance, f_helpfulness, f_conciseness, f_groundedness]
+            # Retrieval Context Relevance: Evaluates quality of RETRIEVAL spans
+            # This targets all RETRIEVAL spans (from websearch, tmdb tools) and evaluates
+            # whether the retrieved contexts are relevant to the query
+            f_retrieval_relevance = (
+                Feedback(
+                    bedrock_judge.context_relevance_with_cot_reasons,
+                    name="Retrieval Context Relevance",
+                )
+                .on({
+                    "question": Selector(
+                        span_type=SpanAttributes.SpanType.RETRIEVAL,
+                        span_attribute=SpanAttributes.RETRIEVAL.QUERY_TEXT,
+                    )
+                })
+                .on({
+                    "context": Selector(
+                        span_type=SpanAttributes.SpanType.RETRIEVAL,
+                        span_attribute=SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS,
+                    )
+                })
+                .aggregate(np.mean)
+            )
+            
+            llm_feedbacks = [f_relevance, f_helpfulness, f_conciseness, f_groundedness, f_retrieval_relevance]
             
             logger.info(f"✓ Created {len(llm_feedbacks)} LLM-based feedback function(s): {[f.name for f in llm_feedbacks]}")
             logger.info("Judge LLM: Claude 3.5 Sonnet (Bedrock)")
@@ -435,20 +455,20 @@ def main():
         logger.info(f"Total feedbacks configured: {len(all_feedbacks)}")
         logger.info(f"  Feedbacks will be evaluated during live_run()")
 
-    # Wrap agent with TruApp
-    logger.info("Wrapping agent with TruApp for trace recording...")
+    # Wrap agent with TruGraph (LangGraph-specific recorder)
+    logger.info("Wrapping agent with TruGraph for trace recording...")
     try:
-        from trulens.apps.app import TruApp
+        from trulens.apps.langgraph import TruGraph
         from datetime import datetime
 
-        tru_app = TruApp(
+        tru_app = TruGraph(
             agent,
             app_name="movie_agent",
             app_version="v1",
             connector=connector,
             feedbacks=all_feedbacks
         )
-        logger.info("✓ TruApp wrapper created successfully (app_name=movie_agent, version=v1)")
+        logger.info("✓ TruGraph wrapper created successfully (app_name=movie_agent, version=v1)")
         logger.info(f"Connector: {type(connector).__name__}")
         if all_feedbacks:
             logger.info(f"Total Feedbacks: {len(all_feedbacks)}")
@@ -456,7 +476,7 @@ def main():
                 logger.info(f"  - {fb.name}")
 
     except Exception as e:
-        logger.error(f"Failed to create TruApp wrapper: {e}")
+        logger.error(f"Failed to create TruGraph wrapper: {e}")
         logger.error(traceback.format_exc())
         sys.exit(1)
 
@@ -523,7 +543,7 @@ def main():
                 
                 return all_success
 
-        # Run async recommendations within TruApp live_run context
+        # Run async recommendations within TruGraph live_run context
         success = asyncio.run(run_recommendations())
 
         if not success:

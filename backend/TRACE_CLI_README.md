@@ -6,7 +6,7 @@ A standalone CLI application for recording TruLens traces to Snowflake. This scr
 
 This CLI app:
 - Configures TruLens to send instrumentation traces to Snowflake
-- Wraps a MovieAgent (LangGraph) with TruApp for automatic tracing
+- Wraps a MovieAgent (LangGraph) with TruGraph for automatic tracing
 - Runs 3 different movie recommendation queries **in parallel**
 - Records all LLM interactions, tool calls, and responses to Snowflake tables
 
@@ -84,7 +84,7 @@ uv run python trace_cli.py
 3. **Authenticates with Snowflake** via browser SSO
 4. **Verifies Snowpark session** (database, schema, warehouse, role)
 5. **Checks for existing TruLens tables** in Snowflake
-6. **Creates TruApp wrapper** around the MovieAgent
+6. **Creates TruGraph wrapper** around the MovieAgent
 7. **Runs 3 movie queries in parallel**:
    - "Recommend a good sci-fi movie"
    - "What are some great comedy movies from the 2020s?"
@@ -131,7 +131,7 @@ TRULENS CONNECTOR DIAGNOSTICS
   Table Mode: Traditional TruLens tables (OTEL traces + feedbacks)
 
 ✓ MovieAgent created successfully
-✓ TruApp wrapper created successfully
+✓ TruGraph wrapper created successfully
 
 =============================================================
 RUNNING 1 QUERIES IN PARALLEL
@@ -174,8 +174,8 @@ RESPONSE:
 - Connector diagnostics
 - Table existence checks
 
-### ✅ TruApp Integration
-- Wraps LangGraph agent with TruApp
+### ✅ TruGraph Integration
+- Wraps LangGraph agent with TruGraph (LangGraph-specific recorder)
 - Uses `live_run()` context for proper trace recording
 - Automatic instrumentation via `@instrument` decorators
 
@@ -203,6 +203,7 @@ The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judg
    - **Helpfulness**: Is the recommendation helpful and actionable?
    - **Conciseness**: Is the response clear and not overly verbose?
    - **Groundedness**: Is the recommendation supported by the retrieved contexts (TMDB/web search results)?
+   - **Retrieval Context Relevance**: Are the retrieved contexts (from web search/TMDB) relevant to the query? (evaluated on RETRIEVAL spans)
 
 **Groundedness** helps detect hallucinations by verifying that the agent's recommendations are based on actual retrieved information from TMDB and web search, rather than making up facts.
 
@@ -214,35 +215,69 @@ The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judg
 
 **Note:** Each evaluation makes an API call to Claude, which incurs costs. Use judiciously.
 
-### ⚡ Inline Evaluations (Real-Time)
+### 🔍 RETRIEVAL Span Evaluation
 
-**What are Inline Evaluations?**
+**How are RETRIEVAL spans evaluated?**
 
-Inline evaluations assess agent behavior in real-time during execution, rather than after the fact. When enabled with `ENABLE_EVALUATIONS=true`, the CLI automatically adds inline context relevance evaluation to retrieval operations.
+The CLI uses **TruGraph-level feedbacks** that target RETRIEVAL spans from tools (websearch, tmdb). This approach evaluates retrieval quality after trace completion, without interfering with the agent's conversation flow.
 
-**Where are they used?**
-- **Web Search Tool** (`src/tools/websearch.py`): Evaluates web search result relevance
-- **TMDB Movie Details Tool** (`src/tools/tmdb.py`): Evaluates movie information retrieval quality
+**Why not inline evaluations?**
+
+TruLens provides an `@inline_evaluation` decorator for real-time feedback within LangGraph nodes. However, this approach has limitations:
+
+- **Message flow interference**: Inline evaluations add SystemMessages to the conversation, which breaks Claude's message validation ("Received multiple non-consecutive system messages")
+- **Limited agent adaptation**: The agent would need custom logic to interpret and act on inline feedback
+- **Same evaluation coverage**: TruGraph feedbacks can target RETRIEVAL spans just as effectively
+
+**Implementation: Retrieval Context Relevance Feedback**
+
+Located in `trace_cli.py`, this feedback evaluates all RETRIEVAL spans:
+
+```python
+f_retrieval_relevance = (
+    Feedback(
+        bedrock_judge.context_relevance_with_cot_reasons,
+        name="Retrieval Context Relevance",
+    )
+    .on({
+        "question": Selector(
+            span_type=SpanAttributes.SpanType.RETRIEVAL,
+            span_attribute=SpanAttributes.RETRIEVAL.QUERY_TEXT,
+        )
+    })
+    .on({
+        "context": Selector(
+            span_type=SpanAttributes.SpanType.RETRIEVAL,
+            span_attribute=SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS,
+        )
+    })
+    .aggregate(np.mean)
+)
+```
+
+**What it evaluates:**
+- **Web Search Tool** (`src/tools/websearch.py`): Web search result relevance to query
+- **TMDB Movie Details Tool** (`src/tools/tmdb.py`): Movie information retrieval quality
 
 **How it works:**
-1. Agent calls a retrieval tool (e.g., web search for movie reviews)
-2. `@inline_evaluation` decorator captures the query and retrieved contexts
-3. Claude (judge LLM) scores context relevance in real-time
-4. Evaluation result is added to the agent's LangGraph state as a message
-5. Agent can use this feedback to adjust behavior (e.g., retry with better query)
+1. Tools execute with `@instrument(span_type=RETRIEVAL)` decorator
+2. TruLens captures query text and retrieved contexts in RETRIEVAL spans
+3. After agent completes, TruGraph runs feedback functions asynchronously
+4. Claude (judge LLM) evaluates context relevance for each RETRIEVAL span
+5. Results stored in Snowflake alongside traces
 
 **Benefits:**
-- **Immediate feedback**: Agent knows retrieval quality before moving to next step
-- **Self-aware agents**: Can detect poor retrievals and retry/refine
-- **Better orchestration**: Agent state includes evaluation scores for decision-making
+- **No conversation interference**: Evaluations run after trace completion
+- **Standard TruLens pattern**: Well-tested, production-ready approach
+- **Automatic coverage**: All RETRIEVAL spans evaluated without tool-specific code
+- **Clean architecture**: Separation of concerns between agent logic and evaluation
 
 **Technical Details:**
-- Uses TruLens `@inline_evaluation` decorator from `trulens.apps.langgraph.inline_evaluations`
-- Evaluation results stored as `AnyMessage` objects in LangGraph `MessageState`
+- Feedback targets `SpanType.RETRIEVAL` with OTEL selectors
 - Requires `ENABLE_EVALUATIONS=true` and `TRULENS_USE_ACCOUNT_EVENT_TABLE=false`
-- Each inline evaluation makes a Claude API call (has cost implications)
+- Each evaluation makes a Claude API call (cost applies)
 
-**Reference:** [TruLens Inline Evaluations Documentation](https://www.trulens.org/component_guides/runtime_evaluation/inline_evals/)
+**Reference:** [TruLens Feedback Selectors Documentation](https://www.trulens.org/component_guides/evaluation/feedback_selectors/)
 
 ### 🗄️ Choosing Your Table Mode
 
@@ -295,7 +330,7 @@ SnowflakeConnector (use_account_event_table=False)
     ↓
 MovieAgent (LangGraph)
     ↓
-TruApp(agent, connector, feedbacks)
+TruGraph(agent, connector, feedbacks)
     ↓
 live_run() context
     ↓
@@ -353,7 +388,7 @@ For more appropriate MovieAgent evaluation, consider:
 After running successfully:
 1. Check Snowflake for trace tables
 2. Query trace data for analysis
-3. Integrate TruApp into other applications
+3. Integrate TruGraph into other applications
 4. Add evaluation feedback functions (optional)
 5. Build dashboards using trace data
 
