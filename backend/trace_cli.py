@@ -94,23 +94,15 @@ def main():
     logger.info("✓ All required environment variables found")
     print()
 
-    # Configure TruLens logging (reduce connector noise)
-    # Set connectors and core.app to CRITICAL to suppress error tracebacks
-    logging.getLogger("trulens").setLevel(logging.WARNING)  # Reduce general trulens noise
-    logging.getLogger("trulens.core").setLevel(logging.WARNING)
-    logging.getLogger("trulens.core.app").setLevel(logging.CRITICAL)  # Suppress app tracebacks
-    logging.getLogger("trulens.connectors").setLevel(logging.CRITICAL)  # Suppress connector logs
-    logging.getLogger("trulens.connectors.snowflake").setLevel(logging.CRITICAL)  # Suppress tracebacks
-    logging.getLogger("trulens.connectors.snowflake.dao").setLevel(logging.CRITICAL)  # Suppress DAO errors
-    logging.getLogger("trulens.otel").setLevel(logging.WARNING)
-    logging.getLogger("trulens.providers").setLevel(logging.WARNING)
-    logger.info("✓ TruLens logging configured (tracebacks suppressed)")
-
     # Enable TruLens debug logging if requested
     if os.getenv("DEBUG_TRULENS", "").lower() == "true":
         logging.getLogger("trulens").setLevel(logging.DEBUG)
         logging.getLogger("trulens.core").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.core.app").setLevel(logging.DEBUG)
         logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.connectors.snowflake").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.connectors.snowflake.dao").setLevel(logging.DEBUG)
+        logging.getLogger("trulens.otel").setLevel(logging.DEBUG)
         logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
         logger.info("✓ TruLens debug logging enabled (DEBUG_TRULENS=true)")
 
