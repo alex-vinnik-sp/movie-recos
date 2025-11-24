@@ -377,7 +377,37 @@ def main():
                 name="Response Conciseness",
             ).on_input_output()
             
-            llm_feedbacks = [f_relevance, f_helpfulness, f_conciseness]
+            # Groundedness: Is the recommendation grounded in retrieved contexts?
+            # This uses OTEL selectors to get contexts from RETRIEVAL spans
+            from trulens.core.feedback.selector import Selector
+            
+            f_groundedness = (
+                Feedback(
+                    bedrock_judge.groundedness_measure_with_cot_reasons_consider_answerability,
+                    name="Movie Recommendation Groundedness",
+                )
+                .on({
+                    "source": Selector(
+                        span_type=SpanAttributes.SpanType.RETRIEVAL,
+                        span_attribute=SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS,
+                        collect_list=True
+                    )
+                })
+                .on({
+                    "statement": Selector(
+                        span_type=SpanAttributes.SpanType.RECORD_ROOT,
+                        span_attribute=SpanAttributes.RECORD_ROOT.OUTPUT,
+                    )
+                })
+                .on({
+                    "question": Selector(
+                        span_type=SpanAttributes.SpanType.RECORD_ROOT,
+                        span_attribute=SpanAttributes.RECORD_ROOT.INPUT,
+                    )
+                })
+            )
+            
+            llm_feedbacks = [f_relevance, f_helpfulness, f_conciseness, f_groundedness]
             
             logger.info(f"✓ Created {len(llm_feedbacks)} LLM-based feedback function(s): {[f.name for f in llm_feedbacks]}")
             logger.info("Judge LLM: Claude 3.5 Sonnet (Bedrock)")
@@ -416,7 +446,7 @@ def main():
             app_name="movie_agent",
             app_version="v1",
             connector=connector,
-            #feedbacks=all_feedbacks
+            feedbacks=all_feedbacks
         )
         logger.info("✓ TruApp wrapper created successfully (app_name=movie_agent, version=v1)")
         logger.info(f"Connector: {type(connector).__name__}")
@@ -442,8 +472,8 @@ def main():
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        "What are some great comedy movies from the 2020s?",
-        "Suggest a thriller movie with a twist ending"
+        # "What are some great comedy movies from the 2020s?",
+        # "Suggest a thriller movie with a twist ending"
     ]
 
     try:

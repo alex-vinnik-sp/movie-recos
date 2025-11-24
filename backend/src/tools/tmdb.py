@@ -138,7 +138,7 @@ class MovieDetailsTool(BaseTool):
     api_key: str
 
 
-    @inline_evaluation(f_context_relevance)
+    #@inline_evaluation(f_context_relevance)
     @instrument(
         span_type=SpanAttributes.SpanType.RETRIEVAL,
         attributes={

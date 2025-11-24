@@ -202,6 +202,9 @@ The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judg
    - **Answer Relevance**: Does the recommendation address the user's query?
    - **Helpfulness**: Is the recommendation helpful and actionable?
    - **Conciseness**: Is the response clear and not overly verbose?
+   - **Groundedness**: Is the recommendation supported by the retrieved contexts (TMDB/web search results)?
+
+**Groundedness** helps detect hallucinations by verifying that the agent's recommendations are based on actual retrieved information from TMDB and web search, rather than making up facts.
 
 **How it works:**
 1. Your app generates a movie recommendation
