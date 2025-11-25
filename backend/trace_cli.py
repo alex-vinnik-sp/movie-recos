@@ -117,29 +117,49 @@ def main():
         logger.warning("⚠️  TruLens OTEL tracing disabled (TRULENS_OTEL_TRACING=false)")
         logger.warning("   @instrument decorators will not capture traces")
 
+    # Display TruLens package versions using importlib.metadata
+    try:
+        from importlib.metadata import version
+        logger.info(f"TruLens Core: v{version('trulens-core')}")
+        logger.info(f"TruLens Connectors Snowflake: v{version('trulens-connectors-snowflake')}")
+        logger.info(f"TruLens Apps LangGraph: v{version('trulens-apps-langgraph')}")
+        logger.info(f"TruLens Benchmark: v{version('trulens-benchmark')}")
+        logger.info(f"TruLens Providers Bedrock: v{version('trulens-providers-bedrock')}")
+    except Exception as e:
+        logger.debug(f"Could not retrieve TruLens package versions: {e}")
+
     # Initialize TruLens with Snowflake connector
     logger.info("Initializing TruLens with Snowflake connector...")
-    logger.info("Note: A browser window will open for Snowflake authentication")
     try:
         from trulens.connectors.snowflake import SnowflakeConnector
         from snowflake.snowpark import Session
 
-        # Configure Snowflake connection with SSO
+        # Configure Snowflake connection with conditional authentication
+        snowflake_password = os.getenv("SNOWFLAKE_PASSWORD")
+
         snowflake_config = {
             "account": os.getenv("SNOWFLAKE_ACCOUNT"),
             "user": os.getenv("SNOWFLAKE_USER"),
-            "authenticator": "externalbrowser",  # SSO authentication
             "database": os.getenv("SNOWFLAKE_DATABASE"),
             "schema": os.getenv("SNOWFLAKE_SCHEMA"),
             "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
             "role": os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
         }
 
-        # Create Snowpark session with SSO
-        logger.info("Creating Snowpark session with SSO authentication...")
+        # Add authentication method based on environment
+        if snowflake_password:
+            snowflake_config["password"] = snowflake_password
+            auth_method = "password"
+            logger.info("Creating Snowpark session with password authentication...")
+        else:
+            snowflake_config["authenticator"] = "externalbrowser"
+            auth_method = "SSO (external browser)"
+            logger.info("Creating Snowpark session with external browser authentication...")
+            logger.info("Note: A browser window will open for Snowflake authentication")
+
         snowpark_session = Session.builder.configs(snowflake_config).create()
         logger.info("✓ Snowpark session created successfully")
-        logger.info("✓ Authentication successful")
+        logger.info(f"✓ Authentication successful (method: {auth_method})")
         print()
 
         # Verify Snowpark session
