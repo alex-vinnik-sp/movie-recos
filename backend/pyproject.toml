@@ -10,18 +10,15 @@ dependencies = [
     "langgraph>=1.0.3",
     "langchain>=1.1.0",
     "langchain-aws>=1.1.0",
+    "langchain-community>=0.4.0",
     "langchain-core>=1.1.0",
     "boto3>=1.34.0",
-    "trulens-core>=2.5.1",
-    "trulens-connectors-snowflake>=2.5.1",
-    "trulens-apps-langgraph>=2.5.1",
-    "trulens-benchmark>=2.5.1",
-    "trulens-providers-bedrock>=2.5.1",
+    "openlit>=1.0.0",
     "tqdm>=4.66.0",
-    "snowflake-connector-python[pandas,secure-local-storage]>=3.0.0",
     "requests>=2.31.0",
     "httpx>=0.26.0",
     "mcp>=1.0.0",
+    "ollama",
 ]
 
 [build-system]
@@ -31,5 +28,5 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = []

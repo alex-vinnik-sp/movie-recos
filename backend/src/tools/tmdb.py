@@ -6,8 +6,6 @@ from typing import Optional, Type
 import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
-from trulens.core.otel.instrument import instrument
-from trulens.otel.semconv.trace import SpanAttributes
 
 logger = logging.getLogger(__name__)
 
@@ -104,13 +102,6 @@ class MovieDetailsTool(BaseTool):
     args_schema: Type[BaseModel] = MovieDetailsInput
     api_key: str
 
-    @instrument(
-        span_type=SpanAttributes.SpanType.RETRIEVAL,
-        attributes={
-            SpanAttributes.RETRIEVAL.QUERY_TEXT: "movie_id",
-            SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS: "return",
-            }
-    )
     def _run(self, movie_id: int) -> str:
         """Execute the details fetch."""
         logger.info(f"Fetching movie details: movie_id={movie_id}")

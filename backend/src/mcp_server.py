@@ -12,63 +12,23 @@ from src.agent import create_movie_agent
 # Load environment variables
 load_dotenv()
 
-# Enable TruLens debug logging if requested
-if os.getenv("DEBUG_TRULENS", "").lower() == "true":
-    import logging
-    logging.getLogger("trulens").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.core").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
-    print("TruLens debug logging enabled", file=sys.stderr)
+# Initialize OpenLit for LLM observability
+import logging
+logger = logging.getLogger(__name__)
 
-# Configure Snowflake AI Observability (if enabled)
-if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
-    # Set TruLens environment variable for OTEL tracing
-    os.environ["TRULENS_OTEL_TRACING"] = "1"
-    print("Snowflake AI Observability enabled", file=sys.stderr)
+try:
+    import openlit
     
-    # Initialize TruLens Snowflake connector
-    try:
-        from trulens.connectors.snowflake import SnowflakeConnector
-        from snowflake.snowpark import Session
-        
-        # Configure Snowflake connection with SSO
-        snowflake_config = {
-            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_USER"),
-            "authenticator": "externalbrowser",  # SSO authentication
-            "database": os.getenv("SNOWFLAKE_DATABASE"),
-            "schema": os.getenv("SNOWFLAKE_SCHEMA"),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-            "role": os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-        }
-        
-        # Validate Snowflake configuration
-        required_keys = ["account", "user", "database", "schema", "warehouse"]
-        missing_sf_vars = [k for k in required_keys if not snowflake_config.get(k)]
-        if missing_sf_vars:
-            print(f"Warning: Missing Snowflake configuration: {', '.join(missing_sf_vars)}", file=sys.stderr)
-            print("Snowflake AI Observability will be disabled", file=sys.stderr)
-        else:
-            # Create Snowpark session with SSO
-            print("Creating Snowpark session with SSO authentication...", file=sys.stderr)
-            snowpark_session = Session.builder.configs(snowflake_config).create()
-            print("Snowpark session created successfully", file=sys.stderr)
-            
-            # Initialize TruLens connector with the Snowpark session
-            connector = SnowflakeConnector(snowpark_session=snowpark_session)
-            print("Snowflake connector initialized for OTEL trace export", file=sys.stderr)
-    except ImportError:
-        print("Error: TruLens packages not installed. Run: uv sync", file=sys.stderr)
-        sys.exit(1)
-    except ValueError as e:
-        print(f"Error: Invalid Snowflake configuration: {str(e)}", file=sys.stderr)
-        print("Please check your Snowflake credentials and configuration", file=sys.stderr)
-        print("Exiting due to invalid Snowflake configuration", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Failed to initialize Snowflake AI Observability: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+    openlit.init(
+        application_name="movie-recommendations-mcp",
+        disabled_instrumentors=["langchain"]
+    )
+    
+    logger.info("OpenLit initialized successfully - auto-instrumenting LangGraph/Bedrock")
+except ImportError:
+    logger.warning("OpenLit not installed. Install with: pip install openlit")
+except Exception as e:
+    logger.warning(f"Failed to initialize OpenLit: {e}")
 
 # Validate required environment variables
 # Note: AWS credentials are handled by boto3's default credential chain

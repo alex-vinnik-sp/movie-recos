@@ -22,64 +22,15 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 logger.info("Environment variables loaded")
 
-# Enable TruLens debug logging if requested
-if os.getenv("DEBUG_TRULENS", "").lower() == "true":
-    logging.getLogger("trulens").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.core").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.connectors").setLevel(logging.DEBUG)
-    logging.getLogger("trulens.providers").setLevel(logging.DEBUG)
-    logger.info("TruLens debug logging enabled")
+# Initialize OpenLit for LLM observability
+import openlit
 
-# Configure Snowflake AI Observability for tracing (if enabled)
-if os.getenv("ENABLE_SNOWFLAKE_OBSERVABILITY", "").lower() == "true":
-    # Set TruLens environment variable for OTEL tracing
-    os.environ["TRULENS_OTEL_TRACING"] = "1"
-    logger.info("Snowflake AI Observability (tracing) enabled")
-    
-    # Initialize TruLens Snowflake connector
-    try:
-        from trulens.connectors.snowflake import SnowflakeConnector
-        from snowflake.snowpark import Session
-        
-        # Configure Snowflake connection with SSO
-        snowflake_config = {
-            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_USER"),
-            "authenticator": "externalbrowser",  # SSO authentication
-            "database": os.getenv("SNOWFLAKE_DATABASE"),
-            "schema": os.getenv("SNOWFLAKE_SCHEMA"),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-            "role": os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
-        }
-        
-        # Validate Snowflake configuration
-        required_keys = ["account", "user", "database", "schema", "warehouse"]
-        missing_sf_vars = [k for k in required_keys if not snowflake_config.get(k)]
-        if missing_sf_vars:
-            logger.warning(f"Missing Snowflake configuration: {', '.join(missing_sf_vars)}")
-            logger.warning("Snowflake AI Observability will be disabled")
-        else:
-            # Create Snowpark session with SSO
-            logger.info("Creating Snowpark session with SSO authentication...")
-            snowpark_session = Session.builder.configs(snowflake_config).create()
-            logger.info("Snowpark session created successfully")
-            
-            # Initialize TruLens connector with the Snowpark session
-            connector = SnowflakeConnector(snowpark_session=snowpark_session)
-            logger.info("Snowflake connector initialized for OTEL trace export")
-    except ImportError:
-        logger.error("TruLens packages not installed. Run: uv sync")
-        logger.error(traceback.format_exc())
-        sys.exit(1)
-    except ValueError as e:
-        logger.error(f"Invalid Snowflake configuration: {str(e)}")
-        logger.error("Please check your Snowflake credentials and configuration")
-        logger.error("Exiting due to invalid Snowflake configuration")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Failed to initialize Snowflake AI Observability: {str(e)}")
-        logger.error(traceback.format_exc())
-        sys.exit(1)
+openlit.init(
+    application_name="movie-recommendations-api",
+    environment="production",
+    disabled_instrumentors=["langchain"]
+)
+logger.info("OpenLit initialized successfully - auto-instrumenting LangGraph/Bedrock")
 
 # Validate required environment variables
 # Note: AWS credentials are handled by boto3's default credential chain

@@ -6,8 +6,6 @@ from typing import Type
 import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
-from trulens.core.otel.instrument import instrument
-from trulens.otel.semconv.trace import SpanAttributes
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +27,6 @@ class WebSearchTool(BaseTool):
     args_schema: Type[BaseModel] = WebSearchInput
     api_key: str
 
-
-    @instrument(
-        span_type=SpanAttributes.SpanType.RETRIEVAL,
-        attributes={
-            SpanAttributes.RETRIEVAL.QUERY_TEXT: "query",
-            SpanAttributes.RETRIEVAL.RETRIEVED_CONTEXTS: "return",
-            }
-    )
     def _run(self, query: str) -> str:
         """Execute the search."""
         logger.info(f"Web search: query='{query}'")
