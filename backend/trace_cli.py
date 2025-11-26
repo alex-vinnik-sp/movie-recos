@@ -512,16 +512,17 @@ def main():
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        # "What are some great comedy movies from the 2020s?",
-        # "Suggest a thriller movie with a twist ending"
+        #"What are some great comedy movies from the 2020s?",
+        #"Suggest a thriller movie with a twist ending"
     ]
 
     try:
         # Define async function to process a single query
-        async def process_query(query, index):
+        async def process_query(query, index, live_run):
             """Process a single query and return result with index."""
             logger.info(f"🔍 Starting query {index}: {query}")
-            result = await agent.aget_recommendations(query)
+            with live_run.input(f"query_{index}"):
+                result = await agent.aget_recommendations(query)
             return (index, query, result)
 
         # Define async function to run within live_run context
@@ -536,7 +537,7 @@ def main():
                 
                 # Run all queries in parallel using asyncio.gather
                 logger.info("Executing all queries concurrently...")
-                tasks = [process_query(query, i+1) for i, query in enumerate(queries)]
+                tasks = [process_query(query, i+1, live_run) for i, query in enumerate(queries)]
                 results = await asyncio.gather(*tasks)
                 
                 logger.info("✓ All queries completed")
@@ -560,7 +561,7 @@ def main():
                     else:
                         logger.error(f"Query {index} failed: {result.get('error')}")
                         all_success = False
-                
+                #breakpoint()
                 return all_success
 
         # Run async recommendations within TruGraph live_run context
