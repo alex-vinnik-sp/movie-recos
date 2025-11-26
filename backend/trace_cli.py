@@ -55,10 +55,9 @@ logging.root.addFilter(SuppressTraceback())
 
 def main():
     """Main entry point for the CLI app."""
-    print("=" * 60)
-    print("TruLens Snowflake Tracing CLI")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("TruLens Snowflake Tracing CLI")
+    logger.info("=" * 60)
 
     # Load environment variables from .env file
     logger.info("Loading environment variables from .env file...")
@@ -92,7 +91,6 @@ def main():
         sys.exit(1)
 
     logger.info("✓ All required environment variables found")
-    print()
 
     # Enable TruLens debug logging if requested
     if os.getenv("DEBUG_TRULENS", "").lower() == "true":
@@ -160,12 +158,11 @@ def main():
         snowpark_session = Session.builder.configs(snowflake_config).create()
         logger.info("✓ Snowpark session created successfully")
         logger.info(f"✓ Authentication successful (method: {auth_method})")
-        print()
 
         # Verify Snowpark session
-        print("-" * 60)
-        print("SNOWPARK SESSION VERIFICATION")
-        print("-" * 60)
+        logger.info("-" * 60)
+        logger.info("SNOWPARK SESSION VERIFICATION")
+        logger.info("-" * 60)
         logger.info("Verifying Snowpark session configuration...")
         
         # Get current session info
@@ -175,11 +172,11 @@ def main():
         current_role = snowpark_session.get_current_role()
         current_user = snowpark_session.get_current_user()
         
-        print(f"  Connected User: {current_user}")
-        print(f"  Current Role: {current_role}")
-        print(f"  Current Warehouse: {current_warehouse}")
-        print(f"  Current Database: {current_db}")
-        print(f"  Current Schema: {current_schema}")
+        logger.info(f"Connected User: {current_user}")
+        logger.info(f"Current Role: {current_role}")
+        logger.info(f"Current Warehouse: {current_warehouse}")
+        logger.info(f"Current Database: {current_db}")
+        logger.info(f"Current Schema: {current_schema}")
         
         # Test query to verify connection
         logger.info("Testing Snowpark connection with simple query...")
@@ -198,19 +195,18 @@ def main():
         existing_tables = snowpark_session.sql(check_tables_query).collect()
         
         if existing_tables:
-            print(f"\n  Found {len(existing_tables)} TruLens table(s):")
+            logger.info(f"Found {len(existing_tables)} TruLens table(s):")
             for row in existing_tables:
-                print(f"    - {row['TABLE_NAME']}")
+                logger.info(f"  - {row['TABLE_NAME']}")
         else:
-            print("  ⚠ No TruLens tables found yet (will be created on first trace)")
+            logger.info("⚠ No TruLens tables found yet (will be created on first trace)")
         
-        print()
         logger.info("✓ Snowpark session verification complete")
 
         # Initialize TruLens connector with the Snowpark session
-        print("-" * 60)
-        print("TRULENS CONNECTOR DIAGNOSTICS")
-        print("-" * 60)
+        logger.info("-" * 60)
+        logger.info("TRULENS CONNECTOR DIAGNOSTICS")
+        logger.info("-" * 60)
         logger.info("Initializing TruLens SnowflakeConnector...")
         
         # Configure use_account_event_table based on environment variable
@@ -233,31 +229,29 @@ def main():
             logger.info("  OTEL traces + feedback results will be stored in TruLens schema")
         
         # Log connector details
-        print(f"  Connector Type: {type(connector).__name__}")
-        print(f"  Connector Module: {type(connector).__module__}")
+        logger.info(f"Connector Type: {type(connector).__name__}")
+        logger.info(f"Connector Module: {type(connector).__module__}")
         
         # Check if connector has expected attributes
         logger.info("Verifying connector attributes...")
         if hasattr(connector, 'session'):
-            print(f"  ✓ Connector has session attribute")
+            logger.info("✓ Connector has session attribute")
         if hasattr(connector, 'snowpark_session'):
-            print(f"  ✓ Connector has snowpark_session attribute")
+            logger.info("✓ Connector has snowpark_session attribute")
         
         # Verify OTEL tracing is enabled
         otel_enabled = os.environ.get("TRULENS_OTEL_TRACING")
-        print(f"  OTEL Tracing Enabled: {otel_enabled}")
+        logger.info(f"OTEL Tracing Enabled: {otel_enabled}")
         
         # Display table mode for OTEL traces
         table_mode = "Snowflake native OTEL event tables (traces only)" if use_account_event_table else "Traditional TruLens tables (OTEL traces + feedbacks)"
-        print(f"  Table Mode: {table_mode}")
+        logger.info(f"Table Mode: {table_mode}")
         
-        print()
         logger.info("✓ SnowflakeConnector ready (will be passed to TruGraph)")
-        print("Configuration Summary:")
-        print(f"  Account: {os.getenv('SNOWFLAKE_ACCOUNT')}")
-        print(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
-        print(f"  Schema: {os.getenv('SNOWFLAKE_SCHEMA')}")
-        print()
+        logger.info("Configuration Summary:")
+        logger.info(f"  Account: {os.getenv('SNOWFLAKE_ACCOUNT')}")
+        logger.info(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
+        logger.info(f"  Schema: {os.getenv('SNOWFLAKE_SCHEMA')}")
 
     except Exception as e:
         logger.error(f"Failed to initialize TruLens with Snowflake: {e}")
@@ -276,7 +270,6 @@ def main():
             aws_profile=os.getenv("AWS_PROFILE"),
         )
         logger.info("✓ MovieAgent created successfully")
-        print()
 
     except Exception as e:
         logger.error(f"Failed to create MovieAgent: {e}")
@@ -315,10 +308,9 @@ def main():
             msmarco_sample = msmarco_df.head(10)
             
             logger.info(f"✓ Loaded {len(msmarco_sample)} MS MARCO samples for demonstration")
-            print(f"  Sample queries from MS MARCO:")
+            logger.info("Sample queries from MS MARCO:")
             for idx, row in msmarco_sample.head(3).iterrows():
-                print(f"    - {row.get('query', 'N/A')}")
-            print()
+                logger.info(f"  - {row.get('query', 'N/A')}")
 
         except Exception as e:
             logger.warning(f"Failed to load MS MARCO dataset: {e}")
@@ -502,12 +494,10 @@ def main():
 
     # Run multiple movie recommendations to generate traces
     logger.info("Running movie recommendations to generate traces...")
-    print()
 
     # Create timestamped run name
     run_name = f"movie_rec_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     logger.info(f"Using run name: {run_name}")
-    print()
 
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
@@ -530,10 +520,9 @@ def main():
             with tru_app.live_run(run_name=run_name) as live_run:
                 logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
                 
-                print(f"\n{'=' * 60}")
-                print(f"RUNNING {len(queries)} QUERIES IN PARALLEL")
-                print("=" * 60)
-                print()
+                logger.info("=" * 60)
+                logger.info(f"RUNNING {len(queries)} QUERIES IN PARALLEL")
+                logger.info("=" * 60)
                 
                 # Run all queries in parallel using asyncio.gather
                 logger.info("Executing all queries concurrently...")
@@ -541,7 +530,6 @@ def main():
                 results = await asyncio.gather(*tasks)
                 
                 logger.info("✓ All queries completed")
-                print()
                 
                 # Display results in order
                 all_success = True
@@ -557,7 +545,6 @@ def main():
                         print("-" * 60)
                         print(result.get("response"))
                         print("-" * 60)
-                        print()
                     else:
                         logger.error(f"Query {index} failed: {result.get('error')}")
                         all_success = False
@@ -577,20 +564,16 @@ def main():
         sys.exit(1)
 
     # Confirmation
-    print()
-    print("=" * 60)
+    logger.info("=" * 60)
     logger.info("🎉 Traces have been recorded to Snowflake!")
-    print("=" * 60)
-    print()
-    print("Check your Snowflake database for trace records:")
-    print(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
-    print(f"  Schema: {os.getenv('SNOWFLAKE_SCHEMA')}")
-    print()
-    print("TruLens automatically captured:")
-    print("  - LLM generation spans from _call_model()")
-    print("  - Root record from aget_recommendations()")
-    print("  - Input/output data and metadata")
-    print()
+    logger.info("=" * 60)
+    logger.info("Check your Snowflake database for trace records:")
+    logger.info(f"  Database: {os.getenv('SNOWFLAKE_DATABASE')}")
+    logger.info(f"  Schema: {os.getenv('SNOWFLAKE_SCHEMA')}")
+    logger.info("TruLens automatically captured:")
+    logger.info("  - LLM generation spans from _call_model()")
+    logger.info("  - Root record from aget_recommendations()")
+    logger.info("  - Input/output data and metadata")
 
 
 if __name__ == "__main__":
