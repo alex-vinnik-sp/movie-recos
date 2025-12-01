@@ -798,6 +798,20 @@ wheels = [
 ]
 
 [[package]]
+name = "langchainhub"
+version = "0.1.21"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "requests" },
+    { name = "types-requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/50/76719d356d80b00761d9680e3eb5df0f5ca8587e79b60ae6dcb678828cdd/langchainhub-0.1.21.tar.gz", hash = "sha256:723383b3964a47dbaea6ad5d0ef728accefbc9d2c07480e800bdec43510a8c10", size = 4481, upload-time = "2024-08-11T20:21:42.305Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/63/40328157ddee807991f2f1992c2ad88f479b2472dc9e40d08ccf10700735/langchainhub-0.1.21-py3-none-any.whl", hash = "sha256:1cc002dc31e0d132a776afd044361e2b698743df5202618cf2bad399246b895f", size = 5203, upload-time = "2024-08-11T20:21:40.892Z" },
+]
+
+[[package]]
 name = "langgraph"
 version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -917,6 +931,7 @@ dependencies = [
     { name = "langchain-aws" },
     { name = "langchain-community" },
     { name = "langchain-core" },
+    { name = "langchainhub" },
     { name = "langgraph" },
     { name = "mcp" },
     { name = "ollama" },
@@ -936,10 +951,11 @@ requires-dist = [
     { name = "langchain-aws", specifier = ">=1.1.0" },
     { name = "langchain-community", specifier = ">=0.4.0" },
     { name = "langchain-core", specifier = ">=1.1.0" },
+    { name = "langchainhub", specifier = ">=0.1.0" },
     { name = "langgraph", specifier = ">=1.0.3" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "ollama" },
-    { name = "openlit", specifier = ">=1.0.0" },
+    { name = "openlit", specifier = ">=1.34.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
