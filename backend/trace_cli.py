@@ -443,9 +443,9 @@ def main():
             logger.warning("⚠️  Each evaluation makes an LLM API call (cost applies)")
             
         except Exception as e:
-            logger.warning(f"Failed to create LLM-based feedbacks: {e}")
-            logger.warning("Continuing without LLM feedback functions")
-            llm_feedbacks = []
+            logger.error(f"Failed to create LLM-based feedbacks: {e}")
+            logger.error("Continuing without LLM feedback functions")
+            raise e
     else:
         logger.info("Evaluations disabled (set ENABLE_EVALUATIONS=true in .env to enable)")
         logger.info("  Note: This disables both ground truth and LLM-based feedback evaluations")
@@ -453,16 +453,7 @@ def main():
     # Combine all feedbacks (ground truth + LLM-based)
     all_feedbacks = ground_truth_feedbacks + llm_feedbacks
     
-    # Check if feedbacks are compatible with current table mode
-    if all_feedbacks and use_account_event_table:
-        logger.warning("⚠️  Feedback functions configured but OTEL + account event tables mode is enabled")
-        logger.warning("   TruLens limitation: Feedback evaluation NOT supported with OTEL + native event tables")
-        logger.warning("   Set TRULENS_USE_ACCOUNT_EVENT_TABLE=false to enable OTEL traces + feedbacks")
-        logger.warning("   Disabling feedbacks to avoid initialization errors")
-        all_feedbacks = []
-    elif all_feedbacks:
-        logger.info(f"Total feedbacks configured: {len(all_feedbacks)}")
-        logger.info(f"  Feedbacks will be evaluated during live_run()")
+    logger.info(f"Total feedbacks configured: {len(all_feedbacks)} and will be evaluated during live_run()")
 
     # Wrap agent with TruGraph (LangGraph-specific recorder)
     logger.info("Wrapping agent with TruGraph for trace recording...")
@@ -496,8 +487,8 @@ def main():
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        #"What are some great comedy movies from the 2020s?",
-        #"Suggest a thriller movie with a twist ending"
+        "What are some great comedy movies from the 2020s?",
+        "Suggest a thriller movie with a twist ending"
     ]
 
     try:
@@ -542,7 +533,6 @@ def main():
                     else:
                         logger.error(f"Query {index} failed: {result.get('error')}")
                         all_success = False
-                #breakpoint()
                 return all_success
 
         # Run async recommendations within TruGraph live_run context
