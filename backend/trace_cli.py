@@ -26,12 +26,29 @@ Usage:
 """
 
 import asyncio
+from datetime import datetime
+from importlib.metadata import version
 import logging
 import os
+import re
 import sys
 import traceback
+
 import numpy as np
+import pandas as pd
 from dotenv import load_dotenv
+from snowflake.snowpark import Session
+
+from trulens.apps.langgraph import TruGraph
+from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import TruBEIRDataLoader
+from trulens.connectors.snowflake import SnowflakeConnector
+from trulens.core import Feedback
+from trulens.core.feedback.selector import Selector
+from trulens.feedback import GroundTruthAgreement
+from trulens.otel.semconv.trace import SpanAttributes
+from trulens.providers.bedrock import Bedrock
+
+from src.agent import create_movie_agent
 
 # Custom filter to suppress tracebacks from specific loggers
 class SuppressTraceback(logging.Filter):
@@ -50,7 +67,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add traceback suppression filter to root logger
-logging.root.addFilter(SuppressTraceback())
+#logging.root.addFilter(SuppressTraceback())
 
 
 def main():
@@ -117,7 +134,6 @@ def main():
 
     # Display TruLens package versions using importlib.metadata
     try:
-        from importlib.metadata import version
         logger.info(f"TruLens Core: v{version('trulens-core')}")
         logger.info(f"TruLens Connectors Snowflake: v{version('trulens-connectors-snowflake')}")
         logger.info(f"TruLens Apps LangGraph: v{version('trulens-apps-langgraph')}")
@@ -129,9 +145,6 @@ def main():
     # Initialize TruLens with Snowflake connector
     logger.info("Initializing TruLens with Snowflake connector...")
     try:
-        from trulens.connectors.snowflake import SnowflakeConnector
-        from snowflake.snowpark import Session
-
         # Configure Snowflake connection with conditional authentication
         snowflake_password = os.getenv("SNOWFLAKE_PASSWORD")
 
@@ -261,8 +274,6 @@ def main():
     # Create the MovieAgent
     logger.info("Creating MovieAgent with TruLens instrumentation...")
     try:
-        from src.agent import create_movie_agent
-
         agent = create_movie_agent(
             tmdb_api_key=os.getenv("TMDB_API_KEY"),
             tavily_api_key=os.getenv("TAVILY_API_KEY"),
@@ -280,7 +291,6 @@ def main():
     ground_truth_feedbacks = []
     llm_feedbacks = []
     enable_llm_evals = os.getenv("ENABLE_EVALUATIONS", "false").lower() == "true"
-    
     if enable_llm_evals:
         logger.info("Evaluations enabled - creating feedback functions (ground truth + LLM-based)...")
         
@@ -292,10 +302,6 @@ def main():
         logger.info("Loading MS MARCO BEIR dataset for ground truth demonstration...")
         msmarco_sample = None
         try:
-            from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import (
-                TruBEIRDataLoader,
-            )
-
             # Load a small subset of MS MARCO for demonstration
             beir_loader = TruBEIRDataLoader(
                 data_folder="./beir_data", dataset_name="msmarco"
@@ -319,15 +325,11 @@ def main():
         # Create ground truth feedback functions if MS MARCO loaded successfully
         if msmarco_sample is not None:
             try:
-                from trulens.core import Feedback
-                from trulens.feedback import GroundTruthAgreement
-                from trulens.providers.bedrock import Bedrock as BedrockGT
-
                 logger.info("Creating ground truth feedback functions for demonstration...")
                 logger.info("Using Bedrock (Claude) as LLM judge for ground truth evaluation")
 
                 # Initialize Bedrock provider for ground truth evaluation
-                bedrock_gt_provider = BedrockGT(
+                bedrock_gt_provider = Bedrock(
                     model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
                     region_name=os.getenv("AWS_REGION", "us-east-1"),
                 )
@@ -357,9 +359,6 @@ def main():
         
         # Create LLM-based feedback functions
         try:
-            from trulens.providers.bedrock import Bedrock
-            from trulens.otel.semconv.trace import SpanAttributes
-            
             # Initialize Bedrock provider as the judge LLM
             bedrock_judge = Bedrock(
                 model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -388,8 +387,6 @@ def main():
             
             # Groundedness: Is the recommendation grounded in retrieved contexts?
             # This uses OTEL selectors to get contexts from RETRIEVAL spans
-            from trulens.core.feedback.selector import Selector
-            
             f_groundedness = (
                 Feedback(
                     bedrock_judge.groundedness_measure_with_cot_reasons_consider_answerability,
@@ -470,9 +467,6 @@ def main():
     # Wrap agent with TruGraph (LangGraph-specific recorder)
     logger.info("Wrapping agent with TruGraph for trace recording...")
     try:
-        from trulens.apps.langgraph import TruGraph
-        from datetime import datetime
-
         tru_app = TruGraph(
             agent,
             app_name="movie_agent",
