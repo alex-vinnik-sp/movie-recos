@@ -16,8 +16,9 @@ This CLI app:
    - Database and schema for storing traces
    - Warehouse for compute
    - SSO/OAuth authentication configured
+   - Snowflake Cortex access (for feedback evaluation)
 
-2. **AWS Bedrock Access** for Claude model
+2. **AWS Bedrock Access** for Claude model (for MovieAgent)
 
 3. **API Keys**:
    - TMDB (The Movie Database) API key
@@ -190,7 +191,9 @@ RESPONSE:
 - [TruLens Ground Truth Evaluation](https://www.trulens.org/getting_started/quickstarts/groundtruth_evals_for_retrieval_systems/)
 
 ### ✅ Feedback Evaluations (Optional)
-The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judge:
+The CLI includes optional feedback evaluation using a **hybrid approach**:
+- **MovieAgent**: Uses AWS Bedrock Claude for generating movie recommendations
+- **Feedback Judge**: Uses Snowflake Cortex (llama4-maverick) for evaluating recommendation quality
 
 **How to Enable:** Set `ENABLE_EVALUATIONS=true` in your `.env` file.
 
@@ -208,12 +211,12 @@ The CLI includes optional feedback evaluation using AWS Bedrock Claude as a judg
 **Groundedness** helps detect hallucinations by verifying that the agent's recommendations are based on actual retrieved information from TMDB and web search, rather than making up facts.
 
 **How it works:**
-1. Your app generates a movie recommendation
-2. TruLens sends the input/output to Claude (judge LLM)
-3. Claude scores the quality (0-10) with reasoning
+1. MovieAgent (Bedrock Claude) generates a movie recommendation
+2. TruLens sends the input/output to Snowflake Cortex (llama4-maverick judge)
+3. Cortex scores the quality (0-10) with reasoning
 4. Scores stored in Snowflake for tracking
 
-**Note:** Each evaluation makes an API call to Claude, which incurs costs. Use judiciously.
+**Note:** Agent uses AWS Bedrock, but feedback evaluation uses Snowflake Cortex to centralize evaluation in Snowflake. Each evaluation makes a Cortex API call (Snowflake compute cost).
 
 ### 🔍 RETRIEVAL Span Evaluation
 
@@ -263,7 +266,7 @@ f_retrieval_relevance = (
 1. Tools execute with `@instrument(span_type=RETRIEVAL)` decorator
 2. TruLens captures query text and retrieved contexts in RETRIEVAL spans
 3. After agent completes, TruGraph runs feedback functions asynchronously
-4. Claude (judge LLM) evaluates context relevance for each RETRIEVAL span
+4. Cortex llama4-maverick (judge LLM) evaluates context relevance for each RETRIEVAL span
 5. Results stored in Snowflake alongside traces
 
 **Benefits:**
@@ -275,7 +278,7 @@ f_retrieval_relevance = (
 **Technical Details:**
 - Feedback targets `SpanType.RETRIEVAL` with OTEL selectors
 - Requires `ENABLE_EVALUATIONS=true` and `TRULENS_USE_ACCOUNT_EVENT_TABLE=false`
-- Each evaluation makes a Claude API call (cost applies)
+- Each evaluation makes a Cortex API call (Snowflake compute cost applies)
 
 **Reference:** [TruLens Feedback Selectors Documentation](https://www.trulens.org/component_guides/evaluation/feedback_selectors/)
 
@@ -394,5 +397,5 @@ After running successfully:
 
 ---
 
-**Built with:** TruLens, Snowflake, LangGraph, AWS Bedrock, Python 3.12+
+**Built with:** TruLens, Snowflake, Snowflake Cortex, LangGraph, AWS Bedrock, Python 3.12+
 

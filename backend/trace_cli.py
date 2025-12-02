@@ -25,7 +25,6 @@ Usage:
     python trace_cli.py
 """
 
-import asyncio
 from datetime import datetime
 from importlib.metadata import version
 import logging
@@ -492,27 +491,29 @@ def main():
     ]
 
     try:
-        # Define async function to process a single query
-        async def process_query(query, index, live_run):
+        # Define synchronous function to process a single query
+        def process_query(query, index, live_run):
             """Process a single query and return result with index."""
             logger.info(f"🔍 Starting query {index}: {query}")
             with live_run.input(f"query_{index}"):
-                result = await agent.aget_recommendations(query)
+                result = agent.get_recommendations(query)
             return (index, query, result)
 
-        # Define async function to run within live_run context
-        async def run_recommendations():
+        # Define synchronous function to run within live_run context
+        def run_recommendations():
             with tru_app.live_run(run_name=run_name) as live_run:
                 logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
                 
                 logger.info("=" * 60)
-                logger.info(f"RUNNING {len(queries)} QUERIES IN PARALLEL")
+                logger.info(f"RUNNING {len(queries)} QUERIES SEQUENTIALLY")
                 logger.info("=" * 60)
                 
-                # Run all queries in parallel using asyncio.gather
-                logger.info("Executing all queries concurrently...")
-                tasks = [process_query(query, i+1, live_run) for i, query in enumerate(queries)]
-                results = await asyncio.gather(*tasks)
+                # Run all queries sequentially
+                logger.info("Executing queries one by one...")
+                results = []
+                for i, query in enumerate(queries):
+                    result = process_query(query, i+1, live_run)
+                    results.append(result)
                 
                 logger.info("✓ All queries completed")
                 
@@ -535,8 +536,8 @@ def main():
                         all_success = False
                 return all_success
 
-        # Run async recommendations within TruGraph live_run context
-        success = asyncio.run(run_recommendations())
+        # Run synchronous recommendations within TruGraph live_run context
+        success = run_recommendations()
 
         if not success:
             logger.error("One or more recommendations failed")
