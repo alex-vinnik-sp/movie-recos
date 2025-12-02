@@ -31,6 +31,7 @@ import logging
 import os
 import re
 import sys
+import time
 import traceback
 
 import numpy as np
@@ -486,8 +487,8 @@ def main():
     # Define movie queries (add more queries to the list to run them in parallel)
     queries = [
         "Recommend a good sci-fi movie",
-        "What are some great comedy movies from the 2020s?",
-        "Suggest a thriller movie with a twist ending"
+        # "What are some great comedy movies from the 2020s?",
+        # "Suggest a thriller movie with a twist ending"
     ]
 
     try:
@@ -542,6 +543,15 @@ def main():
         if not success:
             logger.error("One or more recommendations failed")
             sys.exit(1)
+
+        run = tru_app.get_run(run_name=run_name)
+        
+        # while (status := run.get_status()) != "INVOCATION_COMPLETED":
+        #     logger.info(f"Status: {status} - Waiting for run to complete...")
+        #     time.sleep(5)
+
+        status = run.compute_metrics(metrics=["answer_relevance", "helpfulness", "conciseness", "groundedness", "retrieval_relevance", "groundtruth_answer_similarity"])
+        logger.info(f"Metrics computation status: {status}")
 
     except Exception as e:
         logger.error(f"Error during recommendations: {e}")
