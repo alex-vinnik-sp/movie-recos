@@ -147,6 +147,12 @@ class MovieAgent:
         # Otherwise, end
         return "end"
 
+    @instrument(
+            attributes={
+                SpanAttributes.RECORD_ROOT.INPUT: "user_prompt",
+                SpanAttributes.RECORD_ROOT.OUTPUT: "return",
+            }
+    )
     def get_recommendations(self, user_prompt: str) -> Dict[str, Any]:
         """Get movie recommendations based on user prompt (sync version - not the main entry point)."""
         try:
@@ -170,7 +176,6 @@ class MovieAgent:
             return {"success": False, "error": str(e)}
 
     @instrument(
-        span_type=SpanAttributes.SpanType.RECORD_ROOT,
         attributes={
             SpanAttributes.RECORD_ROOT.INPUT: "user_prompt",
             SpanAttributes.RECORD_ROOT.OUTPUT: "return",

@@ -25,10 +25,13 @@ Usage:
     python trace_cli.py
 """
 
+import os
+os.environ["LANGCHAIN_TRACING_V2"] = "false"  # Disable LangChain tracing
+os.environ["LANGGRAPH_TRACING_ENABLED"] = "false"  # Disable LangGraph native tracing
+
 from datetime import datetime
 from importlib.metadata import version
 import logging
-import os
 import re
 import sys
 import time
@@ -44,6 +47,7 @@ from trulens.benchmark.benchmark_frameworks.dataset.beir_loader import TruBEIRDa
 from trulens.connectors.snowflake import SnowflakeConnector
 from trulens.core import Feedback
 from trulens.core.feedback.selector import Selector
+from trulens.core.run import RunStatus
 from trulens.feedback import GroundTruthAgreement
 from trulens.otel.semconv.trace import SpanAttributes
 from trulens.providers.bedrock import Bedrock
@@ -463,7 +467,8 @@ def main():
             app_name="movie_agent",
             app_version="v1",
             connector=connector,
-            feedbacks=all_feedbacks
+            feedbacks=all_feedbacks,
+            #start_evaluator=False
         )
         logger.info("✓ TruGraph wrapper created successfully (app_name=movie_agent, version=v1)")
         logger.info(f"Connector: {type(connector).__name__}")
@@ -545,10 +550,8 @@ def main():
             sys.exit(1)
 
         run = tru_app.get_run(run_name=run_name)
-        
-        # while (status := run.get_status()) != "INVOCATION_COMPLETED":
-        #     logger.info(f"Status: {status} - Waiting for run to complete...")
-        #     time.sleep(5)
+        while (status := run.get_status()) != RunStatus.INVOCATION_COMPLETED:
+            time.sleep(60)
 
         status = run.compute_metrics(metrics=["answer_relevance", "helpfulness", "conciseness", "groundedness", "retrieval_relevance", "groundtruth_answer_similarity"])
         logger.info(f"Metrics computation status: {status}")
