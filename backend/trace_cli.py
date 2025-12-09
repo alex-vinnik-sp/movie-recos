@@ -550,10 +550,11 @@ def main():
             sys.exit(1)
 
         run = tru_app.get_run(run_name=run_name)
-        while (status := run.get_status()) != RunStatus.INVOCATION_COMPLETED:
+        while (status := run.get_status()) == RunStatus.CREATED:
+            logger.info(f"Run status: {status}")
             time.sleep(60)
 
-        status = run.compute_metrics(metrics=["answer_relevance", "helpfulness", "conciseness", "groundedness", "retrieval_relevance", "groundtruth_answer_similarity"])
+        status = run.compute_metrics(metrics=["answer_relevance", "context_relevance", "groundedness", "helpfulness", "conciseness"])
         logger.info(f"Metrics computation status: {status}")
 
     except Exception as e:
