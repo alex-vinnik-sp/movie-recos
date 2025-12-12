@@ -22,13 +22,19 @@ Note: Uses external browser authentication (SSO/OAuth) for Snowflake.
       A browser window will open for authentication.
 
 Usage:
-    python trace_cli.py
+    uv run trace_cli.py [--queries-file QUERIES.txt] [--limit N]
+    
+Examples:
+    uv run trace_cli.py                              # Use default queries.txt, process all
+    uv run trace_cli.py --limit 5                    # Process first 5 queries from queries.txt
+    uv run trace_cli.py --queries-file my_queries.txt --limit 10  # Custom file, first 10 queries
 """
 
 import os
 os.environ["LANGCHAIN_TRACING_V2"] = "false"  # Disable LangChain tracing
 os.environ["LANGGRAPH_TRACING_ENABLED"] = "false"  # Disable LangGraph native tracing
 
+import argparse
 from datetime import datetime
 from importlib.metadata import version
 import logging
@@ -74,8 +80,65 @@ logger = logging.getLogger(__name__)
 #logging.root.addFilter(SuppressTraceback())
 
 
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Run movie recommendation queries with TruLens tracing to Snowflake"
+    )
+    parser.add_argument(
+        "--queries-file",
+        type=str,
+        default="queries.txt",
+        help="Path to text file containing queries (one per line). Default: queries.txt"
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of queries to process (processes first N queries). Default: process all queries"
+    )
+    return parser.parse_args()
+
+
+def load_queries(file_path, limit=None):
+    """
+    Load queries from a text file (one per line).
+    
+    Args:
+        file_path: Path to the queries file
+        limit: Optional maximum number of queries to load (first N)
+    
+    Returns:
+        List of query strings
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # Read all lines, strip whitespace, filter empty lines
+            queries = [line.strip() for line in f if line.strip()]
+        
+        # Apply limit if specified
+        if limit is not None and limit > 0:
+            queries = queries[:limit]
+        
+        logger.info(f"Loaded {len(queries)} queries from {file_path}")
+        if limit is not None:
+            logger.info(f"  (limited to first {limit} queries)")
+        
+        return queries
+    
+    except FileNotFoundError:
+        logger.error(f"Queries file not found: {file_path}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to load queries from {file_path}: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point for the CLI app."""
+    # Parse command line arguments
+    args = parse_args()
+    
     logger.info("=" * 60)
     logger.info("TruLens Snowflake Tracing CLI")
     logger.info("=" * 60)
@@ -489,12 +552,12 @@ def main():
     run_name = f"movie_rec_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     logger.info(f"Using run name: {run_name}")
 
-    # Define movie queries (add more queries to the list to run them in parallel)
-    queries = [
-        "Recommend a good sci-fi movie",
-        # "What are some great comedy movies from the 2020s?",
-        # "Suggest a thriller movie with a twist ending"
-    ]
+    # Load queries from file
+    queries = load_queries(args.queries_file, limit=args.limit)
+    
+    if not queries:
+        logger.error("No queries found in file. Please add queries (one per line).")
+        sys.exit(1)
 
     try:
         # Define synchronous function to process a single query
