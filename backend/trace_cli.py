@@ -22,12 +22,14 @@ Note: Uses external browser authentication (SSO/OAuth) for Snowflake.
       A browser window will open for authentication.
 
 Usage:
-    uv run trace_cli.py [--queries-file QUERIES.txt] [--limit N]
+    uv run trace_cli.py [--queries-file QUERIES.txt] [--limit N] [--one-per-run]
     
 Examples:
-    uv run trace_cli.py                              # Use default queries.txt, process all
+    uv run trace_cli.py                              # Use default queries.txt, process all in one live_run
     uv run trace_cli.py --limit 5                    # Process first 5 queries from queries.txt
     uv run trace_cli.py --queries-file my_queries.txt --limit 10  # Custom file, first 10 queries
+    uv run trace_cli.py --one-per-run                # Each query gets its own live_run (separate traces)
+    uv run trace_cli.py --one-per-run --limit 3      # Process first 3 queries, each in separate live_run
 """
 
 import os
@@ -35,6 +37,7 @@ os.environ["LANGCHAIN_TRACING_V2"] = "false"  # Disable LangChain tracing
 os.environ["LANGGRAPH_TRACING_ENABLED"] = "false"  # Disable LangGraph native tracing
 
 import argparse
+import asyncio
 from datetime import datetime
 from importlib.metadata import version
 import logging
@@ -96,6 +99,11 @@ def parse_args():
         type=int,
         default=None,
         help="Maximum number of queries to process (processes first N queries). Default: process all queries"
+    )
+    parser.add_argument(
+        "--one-per-run",
+        action="store_true",
+        help="Create separate live_run for each query (default: all queries in one live_run)"
     )
     return parser.parse_args()
 
@@ -560,65 +568,149 @@ def main():
         sys.exit(1)
 
     try:
-        # Define synchronous function to process a single query
+        # Define function to process a single query
         def process_query(query, index, live_run):
-            """Process a single query and return result with index."""
+            """Process a single query within a live_run context."""
             logger.info(f"🔍 Starting query {index}: {query}")
             with live_run.input(f"query_{index}"):
                 result = agent.get_recommendations(query)
             return (index, query, result)
-
-        # Define synchronous function to run within live_run context
-        def run_recommendations():
+        
+        # Choose execution mode based on CLI flag
+        if args.one_per_run:
+            # Mode B: Each query gets its own live_run
+            logger.info("=" * 60)
+            logger.info(f"RUNNING {len(queries)} QUERIES (ONE PER LIVE_RUN)")
+            logger.info("=" * 60)
+            
+            results = []
+            run_names = []  # Track all run names
+            base_timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            
+            for i, query in enumerate(queries):
+                query_run_name = f"movie_rec_{base_timestamp}_query_{i+1}"
+                run_names.append(query_run_name)  # Collect run name
+                logger.info(f"Starting live_run: {query_run_name}")
+                
+                with tru_app.live_run(run_name=query_run_name) as live_run:
+                    logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
+                    result = process_query(query, i+1, live_run)
+                    results.append(result)
+                    logger.info(f"✓ Live run completed: {query_run_name}")
+            
+            logger.info("✓ All queries completed (each in separate live_run)")
+        
+        else:
+            # Mode A: All queries in one live_run (default)
+            logger.info("=" * 60)
+            logger.info(f"RUNNING {len(queries)} QUERIES (SINGLE LIVE_RUN)")
+            logger.info("=" * 60)
+            
+            run_names = [run_name]  # Single run name in list
+            
             with tru_app.live_run(run_name=run_name) as live_run:
                 logger.info(f"✓ Live run context started (run_id: {live_run.run_id if hasattr(live_run, 'run_id') else 'N/A'})")
                 
-                logger.info("=" * 60)
-                logger.info(f"RUNNING {len(queries)} QUERIES SEQUENTIALLY")
-                logger.info("=" * 60)
-                
-                # Run all queries sequentially
-                logger.info("Executing queries one by one...")
                 results = []
                 for i, query in enumerate(queries):
                     result = process_query(query, i+1, live_run)
                     results.append(result)
                 
-                logger.info("✓ All queries completed")
-                
-                # Display results in order
-                all_success = True
-                for index, query, result in results:
-                    print(f"\n{'=' * 60}")
-                    print(f"QUERY {index}/{len(queries)}: {query}")
-                    print("=" * 60)
-                    
-                    if result.get("success"):
-                        logger.info(f"✓ Query {index} successful")
-                        print("-" * 60)
-                        print("RESPONSE:")
-                        print("-" * 60)
-                        print(result.get("response"))
-                        print("-" * 60)
-                    else:
-                        logger.error(f"Query {index} failed: {result.get('error')}")
-                        all_success = False
-                return all_success
-
-        # Run synchronous recommendations within TruGraph live_run context
-        success = run_recommendations()
-
-        if not success:
+                logger.info("✓ All queries completed (single live_run)")
+        
+        # Display results (same for both modes)
+        all_success = True
+        for index, query, result in results:
+            print(f"\n{'=' * 60}")
+            print(f"QUERY {index}/{len(queries)}: {query}")
+            print("=" * 60)
+            
+            if result.get("success"):
+                logger.info(f"✓ Query {index} successful")
+                print("-" * 60)
+                print("RESPONSE:")
+                print("-" * 60)
+                print(result.get("response"))
+                print("-" * 60)
+            else:
+                logger.error(f"Query {index} failed: {result.get('error')}")
+                all_success = False
+        
+        if not all_success:
             logger.error("One or more recommendations failed")
             sys.exit(1)
-
-        run = tru_app.get_run(run_name=run_name)
-        while (status := run.get_status()) == RunStatus.CREATED:
-            logger.info(f"Run status: {status}")
-            time.sleep(60)
-
-        status = run.compute_metrics(metrics=["answer_relevance", "context_relevance", "groundedness", "helpfulness", "conciseness"])
-        logger.info(f"Metrics computation status: {status}")
+        
+        # Define async function for computing metrics for a single run
+        async def compute_metrics_for_run(run_name_to_process, idx, total, semaphore):
+            """
+            Compute metrics for a single run asynchronously.
+            
+            Args:
+                run_name_to_process: Name of the run to process
+                idx: Current run index (1-based)
+                total: Total number of runs
+                semaphore: asyncio.Semaphore to limit concurrency
+            """
+            async with semaphore:
+                logger.info(f"Processing run {idx}/{total}: {run_name_to_process}")
+                
+                run = tru_app.get_run(run_name=run_name_to_process)
+                
+                # Wait for run to complete (status changes from CREATED)
+                logger.info(f"  [{idx}/{total}] Waiting for run to complete...")
+                status = run.get_status()
+                while status == RunStatus.CREATED:
+                    logger.info(f"  [{idx}/{total}] Run status: {status}")
+                    await asyncio.sleep(60)
+                    status = run.get_status()
+                
+                logger.info(f"  [{idx}/{total}] Run completed with status: {status}")
+                
+                # Compute metrics (this is synchronous but we run in thread pool)
+                logger.info(f"  [{idx}/{total}] Computing metrics for run: {run_name_to_process}")
+                metrics_status = await asyncio.to_thread(
+                    run.compute_metrics,
+                    metrics=["answer_relevance", "context_relevance", "groundedness", "helpfulness", "conciseness"]
+                )
+                logger.info(f"  [{idx}/{total}] ✓ Metrics computation status: {metrics_status}")
+                
+                return run_name_to_process, metrics_status
+        
+        # Compute metrics for all runs in parallel (5 at a time)
+        logger.info("=" * 60)
+        logger.info(f"COMPUTING METRICS FOR {len(run_names)} RUN(S) - PARALLEL (5 AT A TIME)")
+        logger.info("=" * 60)
+        
+        # Create async function to run parallel metrics computation
+        async def compute_all_metrics():
+            # Semaphore limits concurrent tasks to 5
+            semaphore = asyncio.Semaphore(5)
+            
+            # Create tasks for all runs
+            tasks = [
+                compute_metrics_for_run(run_name, idx, len(run_names), semaphore)
+                for idx, run_name in enumerate(run_names, 1)
+            ]
+            
+            # Run all tasks concurrently (limited by semaphore)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Check for any errors
+            for idx, result in enumerate(results, 1):
+                if isinstance(result, Exception):
+                    logger.error(f"Error computing metrics for run {idx}: {result}")
+                else:
+                    run_name, status = result
+                    logger.debug(f"Run {run_name}: {status}")
+            
+            return results
+        
+        # Execute async metrics computation
+        asyncio.run(compute_all_metrics())
+        
+        logger.info("=" * 60)
+        logger.info(f"✓ Metrics computed for all {len(run_names)} run(s)")
+        logger.info("=" * 60)
 
     except Exception as e:
         logger.error(f"Error during recommendations: {e}")
