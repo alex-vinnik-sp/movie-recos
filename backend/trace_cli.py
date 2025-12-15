@@ -670,7 +670,7 @@ def main():
                 logger.info(f"  [{idx}/{total}] Computing metrics for run: {run_name_to_process}")
                 metrics_status = await asyncio.to_thread(
                     run.compute_metrics,
-                    metrics=["answer_relevance", "context_relevance", "groundedness", "helpfulness", "conciseness"]
+                    metrics=["answer_relevance"]
                 )
                 logger.info(f"  [{idx}/{total}] ✓ Metrics computation status: {metrics_status}")
                 
