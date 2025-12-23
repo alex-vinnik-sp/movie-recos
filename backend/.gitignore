@@ -1,0 +1,96 @@
+# MLflow
+mlruns/
+.mlflow/
+mlflow_data/
+mlflow.db
+mlflow.db/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+*.whl
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.envrc.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+tests/cassettes/
+tests/.pytest_cache/
+*.cover
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Linting
+.ruff_cache/
+.pylint.d/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.cache/
+
+# LangSmith test artifacts
+.cassettes/
+
